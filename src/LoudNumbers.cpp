@@ -25,14 +25,14 @@ struct LoudNumbers : Module {
 
 	LoudNumbers() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		configParam(RANGE_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(LENGTH_PARAM, 0.f, 1.f, 0.f, "");
-		configInput(TRIG_INPUT, "");
-		configInput(RESET_INPUT, "");
-		configOutput(MINUSFIVETOFIVE_OUTPUT, "");
-		configOutput(ZEROTOTEN_OUTPUT, "");
-		configOutput(VOCT_OUTPUT, "");
-		configOutput(GATE_OUTPUT, "");
+		configParam(RANGE_PARAM, 1.f, 4.f, 2.f, "Octave range", " octaves");
+		configParam(LENGTH_PARAM, 0.001f, 1.f, 0.1f, "Gate length", " s");
+		configInput(TRIG_INPUT, "Trigger");
+		configInput(RESET_INPUT, "Reset");
+		configOutput(MINUSFIVETOFIVE_OUTPUT, "-5V to 5V");
+		configOutput(ZEROTOTEN_OUTPUT, "0 to 10V");
+		configOutput(VOCT_OUTPUT, "Volts per octave");
+		configOutput(GATE_OUTPUT, "Gate");
 	}
 
 	// Variables to track whether trigger is happening
