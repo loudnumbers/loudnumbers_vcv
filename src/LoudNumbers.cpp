@@ -35,8 +35,36 @@ struct LoudNumbers : Module {
 		configOutput(GATE_OUTPUT, "");
 	}
 
+	// Variables to track whether trigger is happening
+	bool gateon = false;
+	float wait = 0.f;
+
 	void process(const ProcessArgs& args) override {
-	}
+
+		// This section of the code responds to triggers, delivering a gate of a specific length.
+
+		// Check if gate is on and wait time has elapsed
+		if (gateon) {
+			if (wait > params[LENGTH_PARAM].getValue()) {
+				// If so, turn off the gate
+				outputs[GATE_OUTPUT].setVoltage(0.f);
+				gateon = false;
+			} else {
+				// If not, append to the wait variable
+				wait += args.sampleTime; // this function runs
+			};
+		} 
+
+		// If a trigger is received.
+		if (inputs[TRIG_INPUT].getVoltage() > 0) {
+			// Turn the gate on
+			outputs[GATE_OUTPUT].setVoltage(10.f);
+			gateon = true;
+			// Reset the wait time
+			wait = 0.f;
+		};
+
+	};
 };
 
 
