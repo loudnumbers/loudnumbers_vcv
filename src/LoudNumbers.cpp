@@ -50,6 +50,9 @@ struct LoudNumbers : Module {
 	int row = 0;
 	int datalength = static_cast<int>(data.size());
 
+	// Trigger for incoming gate
+	dsp::SchmittTrigger ingate;
+
 	// This function scales a number from one range to another
 	float scalemap(float x, float inmin, float inmax, float outmin, float outmax) {
 		return outmin + (outmax - outmin) * ((x - inmin) / (inmax - inmin));
@@ -65,11 +68,11 @@ struct LoudNumbers : Module {
 			firstrun = false;
 		}
 
-		// if outgoing gate is on
+		// if output gate is on
 		if (outgateon) {
 			// if wait time has elapsed
 			if (wait > params[LENGTH_PARAM].getValue()) {
-				// turn off the gate
+				// turn off the output gate
 				outputs[GATE_OUTPUT].setVoltage(0.f);
 				outgateon = false;
 			} else {
@@ -79,7 +82,8 @@ struct LoudNumbers : Module {
 		} else { // If the gate isn't on
 			
 			// and if a gate is high in the trigger input
-			if (inputs[TRIG_INPUT].getVoltage() > 0) {
+			if (ingate.process(inputs[TRIG_INPUT].getVoltage())) {
+			//if (inputs[TRIG_INPUT].getVoltage() > 0) {
 
 				// Set the voltages to the data
 				outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, -5.f, 5.f));
