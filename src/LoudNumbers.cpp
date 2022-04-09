@@ -1,5 +1,4 @@
 #include "plugin.hpp"
-#include "GateTrigger.h"
 #include <algorithm>
 #include <vector>
 
@@ -27,7 +26,8 @@ struct LoudNumbers : Module {
 
 	LoudNumbers() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		configParam(RANGE_PARAM, 1.f, 4.f, 2.f, "Octave range", " octaves");
+		configParam(RANGE_PARAM, 1, 4, 2, "Octave range", " octaves");
+		getParamQuantity(RANGE_PARAM)->snapEnabled = true;
 		configParam(LENGTH_PARAM, 0.001f, 1.f, 0.1f, "Gate length", " s");
 		configInput(TRIG_INPUT, "Trigger");
 		configInput(RESET_INPUT, "Reset");
@@ -50,7 +50,7 @@ struct LoudNumbers : Module {
 	int row = 0;
 	int datalength = static_cast<int>(data.size());
 
-	// Trigger for incoming gate
+	// Trigger for incoming gate detection
 	dsp::SchmittTrigger ingate;
 
 	// This function scales a number from one range to another
