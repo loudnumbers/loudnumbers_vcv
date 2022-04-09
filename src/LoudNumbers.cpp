@@ -38,7 +38,7 @@ struct LoudNumbers : Module {
 
 	LoudNumbers() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		configParam(RANGE_PARAM, 1, 4, 2, "Octave range", " octaves");
+		configParam(RANGE_PARAM, 1, 8, 2, "Octave range", " octaves");
 		getParamQuantity(RANGE_PARAM)->snapEnabled = true;
 		configParam(LENGTH_PARAM, 0.001f, 1.f, 0.1f, "Gate length", " s");
 		configInput(TRIG_INPUT, "Trigger");
@@ -85,10 +85,22 @@ struct LoudNumbers : Module {
 			if (ingate.process(inputs[TRIG_INPUT].getVoltage())) {
 			//if (inputs[TRIG_INPUT].getVoltage() > 0) {
 
+				float voctmin;
+				float voctmax;
+
+				// Calculate v/oct min and max
+				if (params[RANGE_PARAM].getValue() < 4) {
+					voctmin = 0;
+					voctmax = params[RANGE_PARAM].getValue();
+				} else {
+					voctmin = 4 - params[RANGE_PARAM].getValue();
+					voctmax = 4;
+				}
+
 				// Set the voltages to the data
 				outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, -5.f, 5.f));
 				outputs[ZEROTOTEN_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, 0.f, 10.f));
-				outputs[VOCT_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, 0.f, params[RANGE_PARAM].getValue()));
+				outputs[VOCT_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, voctmin, voctmax));
 
 				// Logging for info
 				//INFO("row %d", row);
