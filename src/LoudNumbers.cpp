@@ -1,5 +1,7 @@
 #include "plugin.hpp"
-
+#include "GateTrigger.h"
+#include <algorithm>
+#include <vector>
 
 struct LoudNumbers : Module {
 	enum ParamId {
@@ -35,35 +37,77 @@ struct LoudNumbers : Module {
 		configOutput(GATE_OUTPUT, "Gate");
 	}
 
-	// Variables to track whether trigger is happening
-	bool gateon = false;
+	// Variables to track whether gate out is happening
+	bool outgateon = false;
+	bool ingateon = false;
+	bool firstrun = true;
 	float wait = 0.f;
+
+	// Data variables
+	std::vector<float> data{ 10.f,20.f,40.f,45.f,60.f,62.f,63.f,90.f };
+	float datamin = *std::min_element(data.begin(), data.end());
+	float datamax = *std::max_element(data.begin(), data.end());
+	int row = 0;
+	int datalength = static_cast<int>(data.size());
+
+	// This function scales a number from one range to another
+	float scalemap(float x, float inmin, float inmax, float outmin, float outmax) {
+		return outmin + (outmax - outmin) * ((x - inmin) / (inmax - inmin));
+	}
 
 	void process(const ProcessArgs& args) override {
 
-		// This section of the code responds to triggers, delivering a gate of a specific length.
+		// Logging some info about the data on first run.
+		if (firstrun) {
+			INFO("data min %f", datamin);
+			INFO("data max %f", datamax);
+			INFO("data length %i", datalength);
+			firstrun = false;
+		}
 
-		// Check if gate is on and wait time has elapsed
-		if (gateon) {
+		// if outgoing gate is on
+		if (outgateon) {
+			// if wait time has elapsed
 			if (wait > params[LENGTH_PARAM].getValue()) {
-				// If so, turn off the gate
+				// turn off the gate
 				outputs[GATE_OUTPUT].setVoltage(0.f);
-				gateon = false;
+				outgateon = false;
 			} else {
 				// If not, append to the wait variable
-				wait += args.sampleTime; // this function runs
+				wait += args.sampleTime;
 			};
-		} 
+		} else { // If the gate isn't on
+			
+			// and if a gate is high in the trigger input
+			if (inputs[TRIG_INPUT].getVoltage() > 0) {
 
-		// If a trigger is received.
-		if (inputs[TRIG_INPUT].getVoltage() > 0) {
-			// Turn the gate on
-			outputs[GATE_OUTPUT].setVoltage(10.f);
-			gateon = true;
-			// Reset the wait time
-			wait = 0.f;
-		};
+				// Set the voltages to the data
+				outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, -5.f, 5.f));
+				outputs[ZEROTOTEN_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, 0.f, 10.f));
+				outputs[VOCT_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, 0.f, params[RANGE_PARAM].getValue()));
 
+				// Logging for info
+				INFO("row %d", row);
+				INFO("datapoint %f", data[row]);
+				INFO("minusfivetofive %f", scalemap(data[row], datamin, datamax, -5.f, 5.f));
+				INFO("minuszerototen %f", scalemap(data[row], datamin, datamax, 0.f, 10.f));
+				INFO("voct %f", scalemap(data[row], datamin, datamax, 0.f, params[RANGE_PARAM].getValue()));
+
+				// Turn the gate on and reset the wait time
+				outputs[GATE_OUTPUT].setVoltage(10.f);
+				outgateon = true;
+				wait = 0.f;
+
+				// Increment the row number
+				row++;
+
+			// Check if row has hit max and loop if so
+			if (row == datalength) {row = 0;};
+			}
+		}
+
+		// If a reset is received, reset the row count
+		if (inputs[RESET_INPUT].getVoltage() > 0) {row = 0;};
 	};
 };
 
