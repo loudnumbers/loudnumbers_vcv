@@ -15,6 +15,7 @@ float scalemap(float x, float inmin, float inmax, float outmin, float outmax) {
 };
 
 struct LoudNumbers : Module {
+	
 	enum ParamId {
 		RANGE_PARAM,
 		LENGTH_PARAM,
@@ -85,10 +86,10 @@ struct LoudNumbers : Module {
 			if (ingate.process(inputs[TRIG_INPUT].getVoltage())) {
 			//if (inputs[TRIG_INPUT].getVoltage() > 0) {
 
+				// Calculate v/oct min and max
 				float voctmin;
 				float voctmax;
 
-				// Calculate v/oct min and max
 				if (params[RANGE_PARAM].getValue() < 4) {
 					voctmin = 0;
 					voctmax = params[RANGE_PARAM].getValue();
@@ -105,9 +106,6 @@ struct LoudNumbers : Module {
 				// Logging for info
 				//INFO("row %d", row);
 				//INFO("datapoint %f", data[row]);
-				//INFO("minusfivetofive %f", scalemap(data[row], datamin, datamax, -5.f, 5.f));
-				//INFO("minuszerototen %f", scalemap(data[row], datamin, datamax, 0.f, 10.f));
-				//INFO("voct %f", scalemap(data[row], datamin, datamax, 0.f, params[RANGE_PARAM].getValue()));
 
 				// Turn the gate on and reset the wait time
 				outputs[GATE_OUTPUT].setVoltage(10.f);
