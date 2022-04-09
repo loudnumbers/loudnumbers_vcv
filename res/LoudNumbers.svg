@@ -23,15 +23,15 @@
      showgrid="false"
      units="mm"
      inkscape:document-units="mm"
-     inkscape:zoom="3.0227281"
-     inkscape:cx="156.81199"
-     inkscape:cy="342.0751"
+     inkscape:zoom="1.4257688"
+     inkscape:cx="83.113054"
+     inkscape:cy="217.42656"
      inkscape:window-width="1512"
      inkscape:window-height="916"
      inkscape:window-x="0"
      inkscape:window-y="38"
      inkscape:window-maximized="0"
-     inkscape:current-layer="layer1" />
+     inkscape:current-layer="layer2" />
   <g
      id="layer1"
      transform="scale(3.779638)">
@@ -111,7 +111,7 @@
      id="layer2"
      inkscape:label="components"
      transform="scale(3.779638)"
-     style="display:inline">
+     style="display:none">
     <rect
        id="chart"
        x="6.7363"

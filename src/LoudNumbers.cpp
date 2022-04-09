@@ -2,6 +2,18 @@
 #include <algorithm>
 #include <vector>
 
+// Data variables
+std::vector<float> data{ 10.f,20.f,40.f,45.f,60.f,62.f,63.f,90.f };
+float datamin = *std::min_element(data.begin(), data.end());
+float datamax = *std::max_element(data.begin(), data.end());
+int row = 0;
+int datalength = static_cast<int>(data.size());
+
+// This function scales a number from one range to another
+float scalemap(float x, float inmin, float inmax, float outmin, float outmax) {
+	return outmin + (outmax - outmin) * ((x - inmin) / (inmax - inmin));
+};
+
 struct LoudNumbers : Module {
 	enum ParamId {
 		RANGE_PARAM,
@@ -43,20 +55,8 @@ struct LoudNumbers : Module {
 	bool firstrun = true;
 	float wait = 0.f;
 
-	// Data variables
-	std::vector<float> data{ 10.f,20.f,40.f,45.f,60.f,62.f,63.f,90.f };
-	float datamin = *std::min_element(data.begin(), data.end());
-	float datamax = *std::max_element(data.begin(), data.end());
-	int row = 0;
-	int datalength = static_cast<int>(data.size());
-
 	// Trigger for incoming gate detection
 	dsp::SchmittTrigger ingate;
-
-	// This function scales a number from one range to another
-	float scalemap(float x, float inmin, float inmax, float outmin, float outmax) {
-		return outmin + (outmax - outmin) * ((x - inmin) / (inmax - inmin));
-	}
 
 	void process(const ProcessArgs& args) override {
 
@@ -91,11 +91,11 @@ struct LoudNumbers : Module {
 				outputs[VOCT_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, 0.f, params[RANGE_PARAM].getValue()));
 
 				// Logging for info
-				INFO("row %d", row);
-				INFO("datapoint %f", data[row]);
-				INFO("minusfivetofive %f", scalemap(data[row], datamin, datamax, -5.f, 5.f));
-				INFO("minuszerototen %f", scalemap(data[row], datamin, datamax, 0.f, 10.f));
-				INFO("voct %f", scalemap(data[row], datamin, datamax, 0.f, params[RANGE_PARAM].getValue()));
+				//INFO("row %d", row);
+				//INFO("datapoint %f", data[row]);
+				//INFO("minusfivetofive %f", scalemap(data[row], datamin, datamax, -5.f, 5.f));
+				//INFO("minuszerototen %f", scalemap(data[row], datamin, datamax, 0.f, 10.f));
+				//INFO("voct %f", scalemap(data[row], datamin, datamax, 0.f, params[RANGE_PARAM].getValue()));
 
 				// Turn the gate on and reset the wait time
 				outputs[GATE_OUTPUT].setVoltage(10.f);
@@ -115,6 +115,40 @@ struct LoudNumbers : Module {
 	};
 };
 
+
+// This is the dataviz display
+struct DataViz : Widget {
+
+	//box.size = mm2px(Vec(20.952, 15.594));
+	const float margin = mm2px(2.0);
+	float width = box.size.x - 2 * margin;
+	float height = box.size.y - 2 * margin;
+
+	void drawLayer(const DrawArgs& args, int layer) override {
+
+		// No idea what this does
+		if (layer != 1)
+			return;
+
+		// Loop over the datapoints
+		for (int d = 0; d < datalength; d++) {
+
+			// Calculate x and y coords
+			float x = d * width/datalength;
+			float y = scalemap(data[d], datamin, datamax, 0.f, height);
+
+			// Draw a circle for each
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, x, y, mm2px(4.0 / 2));
+			if (d == row) {
+				nvgFillColor(args.vg, color::alpha(color::WHITE, 1.f));
+			} else {
+				nvgFillColor(args.vg, color::alpha(color::YELLOW, 1.f));
+			}
+			nvgFill(args.vg);
+		}
+	}
+};
 
 struct LoudNumbersWidget : ModuleWidget {
 	LoudNumbersWidget(LoudNumbers* module) {
@@ -140,7 +174,7 @@ struct LoudNumbersWidget : ModuleWidget {
 		// mm2px(Vec(10.17, 10.174))
 		addChild(createWidget<Widget>(mm2px(Vec(6.939, 15.594))));
 		// mm2px(Vec(53.817, 10.174))
-		addChild(createWidget<Widget>(mm2px(Vec(20.952, 15.594))));
+		addChild(createWidget<DataViz>(mm2px(Vec(20.952, 15.594))));
 		// mm2px(Vec(67.83, 34.271))
 		addChild(createWidget<Widget>(mm2px(Vec(6.736, 29.813))));
 	}
