@@ -1,6 +1,7 @@
 #include "plugin.hpp"
 #include <algorithm>
 #include <vector>
+#include <osdialog.h>
 
 // Data variables
 std::vector<float> data{ 10.f,20.f,40.f,45.f,60.f,62.f,63.f,90.f };
@@ -123,6 +124,34 @@ struct LoudNumbers : Module {
 		// If a reset is received, reset the row count
 		if (inputs[RESET_INPUT].getVoltage() > 0) {row = 0;};
 	};
+
+	// Function to load a CSV file
+	void loadCSV() {
+		
+		// Default directory
+		std::string dir = asset::user("../");
+
+		// Get a path from the user
+		char* pathC = osdialog_file(OSDIALOG_OPEN, dir.c_str(), NULL, NULL);
+
+		// If nothing gets chosen, don't do anything
+		if (!pathC) {
+			return;
+		}
+
+		// Otherwise save it to a variable
+		std::string path = pathC;
+		std::free(pathC);
+
+		// Then do what you want with the path.
+		processCSV(path);
+
+	}
+
+	// Do some stuff with the CSV
+	void processCSV(std::string path) {
+		INFO("test");
+	}
 };
 
 
@@ -160,6 +189,13 @@ struct DataViz : Widget {
 	}
 };
 
+struct LoadCSVItem : Widget {
+	LoudNumbers* module;
+	void onAction(const event::Action& e) override {
+		module->loadCSV();
+	}
+};
+
 struct LoudNumbersWidget : ModuleWidget {
 	LoudNumbersWidget(LoudNumbers* module) {
 		setModule(module);
@@ -182,7 +218,7 @@ struct LoudNumbersWidget : ModuleWidget {
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(68.387, 96.195)), module, LoudNumbers::GATE_OUTPUT));
 
 		// mm2px(Vec(10.17, 10.174))
-		addChild(createWidget<Widget>(mm2px(Vec(6.939, 15.594))));
+		addChild(createWidget<LoadCSVItem>(mm2px(Vec(6.939, 15.594))));
 		// mm2px(Vec(53.817, 10.174))
 		addChild(createWidget<DataViz>(mm2px(Vec(20.952, 15.594))));
 		// mm2px(Vec(67.83, 34.271))
