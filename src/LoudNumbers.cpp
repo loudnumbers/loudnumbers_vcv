@@ -89,11 +89,9 @@ struct LoudNumbers : Module
 			// if wait time has elapsed
 			if (wait > params[LENGTH_PARAM].getValue())
 			{
-				INFO("WAIT TIME ELAPSED");
 				// turn off the output gate
 				outputs[GATE_OUTPUT].setVoltage(0.f);
 				outgateon = false;
-				INFO("outgateon: false");
 			}
 			else
 			{
@@ -144,7 +142,6 @@ struct LoudNumbers : Module
 				// Turn the gate on and reset the wait time
 				outputs[GATE_OUTPUT].setVoltage(10.f);
 				outgateon = true;
-				INFO("Outgateon: true");
 				wait = 0.f;
 			}
 		}
@@ -190,7 +187,6 @@ struct LoudNumbers : Module
 // This is the dataviz display
 struct DataViz : Widget
 {
-
 	LoudNumbers *module; // NEW
 
 	const float margin = mm2px(2.0);
@@ -295,13 +291,19 @@ struct LoudNumbersWidget : ModuleWidget
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(49.97, 96.195)), module, LoudNumbers::VOCT_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(68.387, 96.195)), module, LoudNumbers::GATE_OUTPUT));
 
-		// mm2px(Vec(10.17, 10.174))
-		// addChild(createWidget<LoadCSVItem>(mm2px(Vec(6.939, 15.594))));
-		// mm2px(Vec(53.817, 10.174))
+		// Load and display dataviz widget
 		DataViz *data_viz = createWidget<DataViz>(mm2px(Vec(6.736, 29.813)));
 		data_viz->box.size = mm2px(Vec(67.832, 34.272));
 		data_viz->module = module;
 		addChild(data_viz);
+
+		// Load and display CSV selector button
+		// addParam(createParamCentered<loadCSVButton>(mm2px(Vec(8, 8)), module, LoudNumbers::loadCSVButton))
+		// LoadCSVItem *load_csv = createWidget<LoadCSVItem>(mm2px//(Vec(6.939, 15.594)));
+		// load_csv->box.size = mm2px(Vec(10.170, 10.175));
+		// load_csv->module = module;
+		// addChild(load_csv);
+
 		// mm2px(Vec(67.83, 34.271))
 		// addChild(createWidget<Widget>(mm2px(Vec(20.952, 15.594))));
 	}

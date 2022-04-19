@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="8mm"
+   height="8mm"
+   viewBox="0 0 8 8"
+   version="1.1"
+   id="svg17271"
+   sodipodi:docname="csvbuttonpressed.svg"
+   inkscape:version="1.1.1 (c3084ef, 2021-09-22)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview17273"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:document-units="mm"
+     showgrid="false"
+     width="8mm"
+     inkscape:zoom="3.6467419"
+     inkscape:cx="44.697433"
+     inkscape:cy="67.457475"
+     inkscape:window-width="1312"
+     inkscape:window-height="916"
+     inkscape:window-x="0"
+     inkscape:window-y="38"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="g17174" />
+  <defs
+     id="defs17268" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     style="display:inline">
+    <g
+       id="g17174"
+       transform="matrix(0.28515375,0,0,0.28515375,-8.8000013,-18.370308)">
+      <circle
+         style="font-variation-settings:'wght' 300;fill:#003380;fill-opacity:0.5;stroke-width:1.29032"
+         id="path1063"
+         cx="44.888069"
+         cy="78.449989"
+         r="14.02752" />
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:20px;line-height:1.25;font-family:sans-serif;fill:#fffbe4;fill-opacity:1;stroke:none"
+         x="38.443043"
+         y="83.835075"
+         id="text4954"><tspan
+           sodipodi:role="line"
+           id="tspan4952"
+           x="38.443043"
+           y="83.835075"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:Helvetica;-inkscape-font-specification:Helvetica;stroke:none;stroke-opacity:1">⏏</tspan></text>
+    </g>
+  </g>
+</svg>
