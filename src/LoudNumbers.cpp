@@ -52,6 +52,7 @@ struct LoudNumbers : Module
 	}
 
 	// Data variables
+	std::vector<std::string> columns{"Year", "Size", "Length", "Weight"};
 	std::vector<float> data{0.f, 10.f, 20.f, 40.f, 45.f, 60.f, 62.f, 63.f, 10.f, 90.f, 100.f, 0.f, 10.f, 20.f, 40.f, 45.f, 60.f, 62.f, 63.f, 10.f, 90.f, 100.f};
 	float datamin = *std::min_element(data.begin(), data.end());
 	float datamax = *std::max_element(data.begin(), data.end());
