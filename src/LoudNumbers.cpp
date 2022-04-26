@@ -154,18 +154,6 @@ struct LoudNumbers : Module
 		};
 	};
 
-	// Add CSV loading capabilities to the right click menu
-	void appendContextMenu(Menu *menu)
-	{
-		// Spacer
-		menu->addChild(new MenuSeparator());
-
-		// Load CSV
-		menu->addChild(createMenuItem("Load CSV", "",
-									  [=]()
-									  { loadCSV(); }));
-	}
-
 	// Function to load a CSV file
 	void loadCSV()
 	{
@@ -321,6 +309,20 @@ struct LoudNumbersWidget : ModuleWidget
 		column->box.size = mm2px(Vec(67.832, 10.175));									  // Size
 		column->module = module;
 		addChild(column);
+	}
+
+	// Add CSV loading capabilities to the right click menu
+	void appendContextMenu(Menu* menu) override
+	{
+		LoudNumbers* module = dynamic_cast<LoudNumbers*>(this->module);
+
+		// Spacer
+		menu->addChild(new MenuSeparator());
+
+		// Load CSV
+		menu->addChild(createMenuItem("Load CSV", "",
+									  [=]()
+									  { module->loadCSV(); }));
 	}
 };
 
