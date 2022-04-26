@@ -195,15 +195,15 @@ struct DataViz : Widget
 	{
 		float width = box.size.x - 2 * margin;
 		float height = box.size.y - 2 * margin;
-		float circ_size = module->datalength / 5;
-		// The API states that the module should only write to layer 1.
+		float circ_size = 0.5;
+		// The API states that the module  should only write to layer 1.
 		// And we don't want to run this until 'module' has actually been set.
 		if (layer == 1 && module)
 		{
 
 			// Draw the line
 			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, 2 * margin, height - margin);
+			nvgMoveTo(args.vg, 2 * margin, height);
 
 			for (int d = 0; d < module->datalength; d++)
 			{
@@ -211,8 +211,8 @@ struct DataViz : Widget
 				// Calculate x and y coords
 				float x = 2 * margin + (d * width / module->datalength);
 				// Y == zero at the TOP of the box.
-				float y = height - (margin + scalemap(module->data[d], module->datamin, module->datamax,
-													  0.f, height));
+				float y = height - (scalemap(module->data[d], module->datamin, module->datamax,
+											 0.f, height));
 
 				nvgLineTo(args.vg, x, y);
 			}
@@ -229,8 +229,8 @@ struct DataViz : Widget
 				// Calculate x and y coords
 				float x = 2 * margin + (d * width / module->datalength);
 				// Y == zero at the TOP of the box.
-				float y = height - (margin + scalemap(module->data[d], module->datamin, module->datamax,
-													  0.f, height));
+				float y = height - (scalemap(module->data[d], module->datamin, module->datamax,
+											 0.f, height));
 
 				// Draw a circle for each
 				nvgBeginPath(args.vg);
@@ -247,7 +247,7 @@ struct DataViz : Widget
 				}
 				else
 				{
-					nvgCircle(args.vg, x, y, mm2px(circ_size / 2));
+					nvgCircle(args.vg, x, y, mm2px(circ_size));
 					nvgFillColor(args.vg, color::fromHexString(module->faded));
 				}
 
