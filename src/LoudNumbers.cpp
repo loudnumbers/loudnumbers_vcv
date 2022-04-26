@@ -154,6 +154,18 @@ struct LoudNumbers : Module
 		};
 	};
 
+	// Add CSV loading capabilities to the right click menu
+	void appendContextMenu(Menu *menu)
+	{
+		// Spacer
+		menu->addChild(new MenuSeparator);
+
+		// Load CSV
+		menu->addChild(createMenuItem("Load CSV", "",
+									  [=]()
+									  { loadCSV(); }));
+	}
+
 	// Function to load a CSV file
 	void loadCSV()
 	{
