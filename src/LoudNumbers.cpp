@@ -260,12 +260,18 @@ struct DataViz : Widget
 	}
 };
 
-struct LoadCSVItem : Widget
+struct ColumnSelector : Widget
 {
-	LoudNumbers *module;
-	void onAction(const event::Action &e) override
+	LoudNumbers *module; // NEW
+	void drawLayer(const DrawArgs &args, int layer) override
 	{
-		module->loadCSV();
+		float width = box.size.x;
+		float height = box.size.y;
+		if (layer == 1 && module)
+		{
+			// Draw stuff
+		}
+		Widget::drawLayer(args, layer);
 	}
 };
 
@@ -298,15 +304,11 @@ struct LoudNumbersWidget : ModuleWidget
 		data_viz->module = module;
 		addChild(data_viz);
 
-		// Load and display CSV selector button
-		// addParam(createParamCentered<loadCSVButton>(mm2px(Vec(8, 8)), module, LoudNumbers::loadCSVButton))
-		// LoadCSVItem *load_csv = createWidget<LoadCSVItem>(mm2px//(Vec(6.939, 15.594)));
-		// load_csv->box.size = mm2px(Vec(10.170, 10.175));
-		// load_csv->module = module;
-		// addChild(load_csv);
-
-		// mm2px(Vec(67.83, 34.271))
-		// addChild(createWidget<Widget>(mm2px(Vec(20.952, 15.594))));
+		// Load and display column selector menu
+		ColumnSelector *column = createWidget<ColumnSelector>(mm2px(Vec(6.736, 15.594))); // Position
+		column->box.size = mm2px(Vec(67.832, 10.175));									  // Size
+		column->module = module;
+		addChild(column);
 	}
 };
 
