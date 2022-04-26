@@ -158,7 +158,7 @@ struct LoudNumbers : Module
 	void appendContextMenu(Menu *menu)
 	{
 		// Spacer
-		menu->addChild(new MenuSeparator);
+		menu->addChild(new MenuSeparator());
 
 		// Load CSV
 		menu->addChild(createMenuItem("Load CSV", "",
