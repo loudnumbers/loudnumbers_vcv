@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <vector>
 #include <osdialog.h>
+#include "rapidcsv.h" //https://github.com/d99kris/rapidcsv
 
 // This function scales a number from one range to another
 float scalemap(float x, float inmin, float inmax, float outmin, float outmax)
@@ -52,7 +53,7 @@ struct LoudNumbers : Module
 	}
 
 	// Data variables
-	std::vector<std::string> columns{"Year", "Size", "Length", "Weight"};
+	std::vector<std::string> columns{"None"};
 	std::vector<float> data{0.f, 10.f, 20.f, 40.f, 45.f, 60.f, 62.f, 63.f, 10.f, 90.f, 100.f, 0.f, 10.f, 20.f, 40.f, 45.f, 60.f, 62.f, 63.f, 10.f, 90.f, 100.f};
 	float datamin = *std::min_element(data.begin(), data.end());
 	float datamax = *std::max_element(data.begin(), data.end());
@@ -181,7 +182,14 @@ struct LoudNumbers : Module
 	// Do some stuff with the CSV
 	void processCSV(std::string path)
 	{
-		INFO("test");
+		INFO("Processing CSV");
+		rapidcsv::Document doc(path);
+		columns = doc.GetColumnNames();
+		data = doc.GetColumn<float>(columns[1]);
+		datamin = *std::min_element(data.begin(), data.end());
+		datamax = *std::max_element(data.begin(), data.end());
+		row = -1; // because the first thing we do is increment it
+		datalength = static_cast<int>(data.size());
 	}
 };
 
