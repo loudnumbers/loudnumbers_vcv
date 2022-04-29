@@ -186,7 +186,14 @@ struct LoudNumbers : Module
 	void processCSV(std::string path)
 	{
 		INFO("Processing CSV");
-		rapidcsv::Document doc(path);
+		
+		// Setting values that aren't numbers to 0 (rather than throwing error)
+		rapidcsv::Document doc(path, 
+							rapidcsv::LabelParams(),
+                           rapidcsv::SeparatorParams(),
+                           rapidcsv::ConverterParams(true /* pHasDefaultConverter */,
+                                                     0.0 /* pDefaultFloat */,
+                                                     1 /* pDefaultInteger */));
 		columns = doc.GetColumnNames();
 		data = doc.GetColumn<float>(columns[colnum]);
 		datamin = *std::min_element(data.begin(), data.end());
