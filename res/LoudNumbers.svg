@@ -24,14 +24,14 @@
      units="mm"
      inkscape:document-units="mm"
      inkscape:zoom="1.4257688"
-     inkscape:cx="83.113055"
+     inkscape:cx="59.266271"
      inkscape:cy="217.42656"
      inkscape:window-width="1512"
      inkscape:window-height="916"
      inkscape:window-x="0"
-     inkscape:window-y="1377"
+     inkscape:window-y="38"
      inkscape:window-maximized="0"
-     inkscape:current-layer="layer1" />
+     inkscape:current-layer="svg17686" />
   <g
      id="layer1"
      transform="scale(3.779638)">
@@ -112,23 +112,15 @@
      id="layer2"
      inkscape:label="components"
      transform="scale(3.779638)"
-     style="display:none">
+     style="display:inline">
     <rect
        id="chart"
-       x="6.7363"
-       y="29.812799"
+       x="6.7238135"
+       y="17.646675"
        width="67.830002"
-       height="34.270901"
-       fill="#ffff00" />
-    <rect
-       id="Rectangle 2"
-       x="6.7358036"
-       y="15.594"
-       width="67.830025"
-       height="10.1744"
+       height="46.437027"
        fill="#ffff00"
-       inkscape:label="column"
-       style="stroke-width:1.12267" />
+       style="stroke-width:1.16404" />
     <circle
        style="font-variation-settings:'wght' 300;fill:#0000ff;fill-opacity:1;stroke-width:0.264576"
        id="circle18357"

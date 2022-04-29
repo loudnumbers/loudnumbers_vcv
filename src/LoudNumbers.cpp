@@ -53,12 +53,15 @@ struct LoudNumbers : Module
 	}
 
 	// Data variables
+	std::string currentpath = "none";
 	std::vector<std::string> columns{"None"};
 	std::vector<float> data{0.f, 10.f, 20.f, 40.f, 45.f, 60.f, 62.f, 63.f, 10.f, 90.f, 100.f, 0.f, 10.f, 20.f, 40.f, 45.f, 60.f, 62.f, 63.f, 10.f, 90.f, 100.f};
 	float datamin = *std::min_element(data.begin(), data.end());
 	float datamax = *std::max_element(data.begin(), data.end());
 	int row = -1; // because the first thing we do is increment it
 	int datalength = static_cast<int>(data.size());
+	int columnslength = static_cast<int>(columns.size());
+	int colnum = 0;
 
 	// Style variables
 	std::string main = "#003380";
@@ -185,12 +188,17 @@ struct LoudNumbers : Module
 		INFO("Processing CSV");
 		rapidcsv::Document doc(path);
 		columns = doc.GetColumnNames();
-		data = doc.GetColumn<float>(columns[1]);
+		data = doc.GetColumn<float>(columns[colnum]);
 		datamin = *std::min_element(data.begin(), data.end());
 		datamax = *std::max_element(data.begin(), data.end());
 		row = -1; // because the first thing we do is increment it
 		datalength = static_cast<int>(data.size());
-	}
+		columnslength = static_cast<int>(columns.size());
+		if (currentpath != path) {
+			colnum = 0;
+			currentpath = path;
+		}
+ 	}
 };
 
 // This is the dataviz display
@@ -208,17 +216,19 @@ struct DataViz : Widget
 		// The API states that the module  should only write to layer 1.
 		// And we don't want to run this until 'module' has actually been set.
 		if (layer == 1 && module)
-		{
+		{	
+			// Write column name
+			//nvgText(args.vg, 0, 0, module->columns[module->column]);
 
 			// Draw the line
 			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, 2 * margin, height);
+			nvgMoveTo(args.vg, margin, height);
 
 			for (int d = 0; d < module->datalength; d++)
 			{
 
 				// Calculate x and y coords
-				float x = 2 * margin + (d * width / module->datalength);
+				float x = margin + (d * width / module->datalength);
 				// Y == zero at the TOP of the box.
 				float y = height - (scalemap(module->data[d], module->datamin, module->datamax,
 											 0.f, height));
@@ -236,7 +246,7 @@ struct DataViz : Widget
 			{
 
 				// Calculate x and y coords
-				float x = 2 * margin + (d * width / module->datalength);
+				float x = margin + (d * width / module->datalength);
 				// Y == zero at the TOP of the box.
 				float y = height - (scalemap(module->data[d], module->datamin, module->datamax,
 											 0.f, height));
@@ -268,21 +278,6 @@ struct DataViz : Widget
 	}
 };
 
-struct ColumnSelector : Widget
-{
-	LoudNumbers *module; // NEW
-	void drawLayer(const DrawArgs &args, int layer) override
-	{
-		float width = box.size.x;
-		float height = box.size.y;
-		if (layer == 1 && module)
-		{
-			// Draw stuff
-		}
-		Widget::drawLayer(args, layer);
-	}
-};
-
 struct LoudNumbersWidget : ModuleWidget
 {
 	LoudNumbersWidget(LoudNumbers *module)
@@ -307,17 +302,24 @@ struct LoudNumbersWidget : ModuleWidget
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(68.387, 96.195)), module, LoudNumbers::GATE_OUTPUT));
 
 		// Load and display dataviz widget
-		DataViz *data_viz = createWidget<DataViz>(mm2px(Vec(6.736, 29.813)));
-		data_viz->box.size = mm2px(Vec(67.832, 34.272));
+		DataViz *data_viz = createWidget<DataViz>(mm2px(Vec(6.736, 17.647)));
+		data_viz->box.size = mm2px(Vec(67.832, 46.438));
 		data_viz->module = module;
 		addChild(data_viz);
-
-		// Load and display column selector menu
-		ColumnSelector *column = createWidget<ColumnSelector>(mm2px(Vec(6.736, 15.594))); // Position
-		column->box.size = mm2px(Vec(67.832, 10.175));									  // Size
-		column->module = module;
-		addChild(column);
 	}
+
+	struct ColumnMenuItem : MenuItem 
+	{
+		LoudNumbers *module;
+		int val;
+		void onAction(const event::Action &e) override {
+			module->colnum = val;
+			module->processCSV(module->currentpath);
+		}
+		void step() override {
+			rightText = (module->colnum == val) ? "✔" : "";
+		}
+	};
 
 	// Add CSV loading capabilities to the right click menu
 	void appendContextMenu(Menu* menu) override
@@ -331,6 +333,18 @@ struct LoudNumbersWidget : ModuleWidget
 		menu->addChild(createMenuItem("Load CSV", "",
 									  [=]()
 									  { module->loadCSV(); }));
+
+		// Spacer
+		menu->addChild(new MenuSeparator());
+
+		for (int i = 0; i < module->columnslength; i++) 
+		{
+			ColumnMenuItem *item = new ColumnMenuItem();
+			item->text = module->columns[i];
+			item->val = i;
+			item->module = module;
+			menu->addChild(item);
+		}
 	}
 };
 
