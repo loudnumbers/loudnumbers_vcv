@@ -15,5 +15,5 @@ Then restart VCV Rack if it's already running and add the module to your rack. R
 Your CSV file should have a single header row. Any missing or non-numeric values will be converted to zeros. Use [CSVLint](https://csvlint.io/) to check if your CSV is valid. If it's invalid, VCV Rack will likely crash.
 
 Some csv files to try it out with:
-Climate data:
-Sunspot data:
+Climate data: <https://raw.githubusercontent.com/loudnumbers/loudnumbers_vcv/main/temperature.csv>
+Sunspot data: <https://raw.githubusercontent.com/loudnumbers/loudnumbers_vcv/main/sunspots.csv>
