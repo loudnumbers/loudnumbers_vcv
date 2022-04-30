@@ -2,8 +2,8 @@
 
 A VCV Rack plugin for Data Sonification.
 
-Download for Windows: <https://www.dropbox.com/s/0ab3yapm2gcvkj4/loudnumbers_vcv_win.zip?dl=1>
-Download for Mac: <https://www.dropbox.com/s/ec7titekcczg9d3/loudnumbers_vcv_mac.zip?dl=1>
+Download for Windows: <https://www.dropbox.com/s/rodz71uckk35xfr/loudnumbers_vcv_win.zip?dl=1>
+Download for Mac: <https://www.dropbox.com/s/o6mhvfyea0qipnh/loudnumbers_vcv_mac.zip?dl=1>
 
 Unzip to your plugins folder:
 
