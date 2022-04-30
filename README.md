@@ -7,8 +7,8 @@ Download for Mac: <https://www.dropbox.com/s/ec7titekcczg9d3/loudnumbers_vcv_mac
 
 Unzip to your plugins folder:
 
-Windows: My Documents/Rack2/
-MacOS: Documents/Rack2/
+- Windows: My Documents/Rack2/
+- MacOS: Documents/Rack2/
 
 Then restart VCV Rack if it's already running and add the module to your rack. Right-click to load a CSV file, and then right-click again to select a column of data from that file.
 
