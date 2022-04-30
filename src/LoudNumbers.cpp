@@ -229,18 +229,24 @@ struct DataViz : Widget
 
 			// Draw the line
 			nvgBeginPath(args.vg);
+			bool firstpoint = true;
 			nvgMoveTo(args.vg, margin, height);
 
 			for (int d = 0; d < module->datalength; d++)
 			{
-
 				// Calculate x and y coords
 				float x = margin + (d * width / module->datalength);
 				// Y == zero at the TOP of the box.
 				float y = height - (scalemap(module->data[d], module->datamin, module->datamax,
 											 0.f, height));
 
-				nvgLineTo(args.vg, x, y);
+				if (firstpoint) {
+					nvgMoveTo(args.vg, x, y);
+					firstpoint = false;
+				} else {
+					nvgLineTo(args.vg, x, y);
+				}
+				
 			}
 
 			nvgStrokeColor(args.vg, color::fromHexString(module->faded));
