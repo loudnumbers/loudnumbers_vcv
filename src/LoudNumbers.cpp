@@ -54,8 +54,8 @@ struct LoudNumbers : Module
 
 	// Data variables
 	std::string currentpath = "none";
-	std::vector<std::string> columns{"None"};
-	std::vector<float> data{0.f, 10.f, 20.f, 40.f, 45.f, 60.f, 62.f, 63.f, 10.f, 90.f, 100.f, 0.f, 10.f, 20.f, 40.f, 45.f, 60.f, 62.f, 63.f, 10.f, 90.f, 100.f};
+	std::vector<std::string> columns{"Temps 1956-2019"};
+	std::vector<float> data{-0.267,-0.007,0.046,0.017,-0.049,0.038,0.014,0.048,-0.223,-0.14,-0.068,-0.074,-0.113,0.032,-0.027,-0.186,-0.065,0.062,-0.214,-0.149,-0.241,0.047,-0.062,0.057,0.092,0.14,0.011,0.194,-0.014,-0.03,0.045,0.192,0.198,0.118,0.296,0.254,0.105,0.148,0.208,0.325,0.183,0.39,0.539,0.306,0.294,0.441,0.496,0.505,0.447,0.545,0.506,0.491,0.395,0.506,0.56,0.425,0.47,0.514,0.579,0.763,0.797,0.677,0.597,0.736};
 	float datamin = *std::min_element(data.begin(), data.end());
 	float datamax = *std::max_element(data.begin(), data.end());
 	int row = -1; // because the first thing we do is increment it
