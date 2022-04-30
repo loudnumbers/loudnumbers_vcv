@@ -62,6 +62,7 @@ struct LoudNumbers : Module
 	int datalength = static_cast<int>(data.size());
 	int columnslength = static_cast<int>(columns.size());
 	int colnum = 0;
+	bool csvloaded = false;
 
 	// Style variables
 	std::string main = "#003380";
@@ -180,6 +181,7 @@ struct LoudNumbers : Module
 
 		// Then do what you want with the path.
 		processCSV(path);
+		csvloaded = true;
 	}
 
 	// Do some stuff with the CSV
@@ -326,8 +328,11 @@ struct LoudNumbersWidget : ModuleWidget
 		LoudNumbers *module;
 		int val;
 		void onAction(const event::Action &e) override {
-			module->colnum = val;
-			module->processCSV(module->currentpath);
+			if (module->csvloaded)
+			{
+				module->colnum = val;
+				module->processCSV(module->currentpath);
+			}
 		}
 		void step() override {
 			rightText = (module->colnum == val) ? "✔" : "";
@@ -345,7 +350,9 @@ struct LoudNumbersWidget : ModuleWidget
 		// Load CSV
 		menu->addChild(createMenuItem("Load CSV", "",
 									  [=]()
-									  { module->loadCSV(); }));
+									  { 
+										  module->loadCSV();
+									  }));
 
 		// Spacer
 		menu->addChild(new MenuSeparator());
