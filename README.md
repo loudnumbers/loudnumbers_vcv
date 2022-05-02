@@ -18,16 +18,20 @@ The top two outputs generate voltages from -5V to 5V and 0 to 10V respectively. 
 
 ## FAQ
 
-Q: What is data sonification?
+**Q: What is data sonification?**
+
 A: Data sonification is the process of turning data into sound. It's a bit like data visualization, but you map numbers onto the properties of sound (volume, pitch, reverb, etc), rather than visuals (colour, shape, size).
 
-Q: My CSV is invalid!
+**Q: My CSV is invalid!**
+
 A: Use [CSVLint](https://csvlint.io/) to check if your CSV is valid. If it is, submit an issue and attach the CSV file you're trying to load and I'll take a look.
 
-Q: How do I make the output sound more musical?
+**Q: How do I make the output sound more musical?**
+
 A: Process the pitch information through a quantizer and consider adjusting the length of your dataset to a multiple of four.
 
-Q: Where can I get some data to try it with?
+**Q: Where can I get some data to try it with?**
+
 A: Try sonifying [climate data](https://raw.githubusercontent.com/loudnumbers/loudnumbers_vcv/main/temperature.csv), or [sunspot data](https://raw.githubusercontent.com/loudnumbers/loudnumbers_vcv/main/sunspots.csv). The [Data is Plural archive](https://www.data-is-plural.com/) is a great source for more interesting datasets.
 
 ## Loud Numbers?
