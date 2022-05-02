@@ -63,10 +63,12 @@ struct LoudNumbers : Module
 	int columnslength = static_cast<int>(columns.size());
 	int colnum = 0;
 	bool csvloaded = false;
+	bool badcsv = false;
 
 	// Style variables
 	std::string main = "#003380";
 	std::string faded = "#805279";
+	std::string white = "#FFFBE4";
 
 	// Variables to track whether gate out is happening
 	bool outgateon = false;
@@ -79,84 +81,85 @@ struct LoudNumbers : Module
 
 	void process(const ProcessArgs &args) override
 	{
-
-		// Logging some info about the data on first run.
-		if (firstrun)
-		{
-			INFO("data min %f", datamin);
-			INFO("data max %f", datamax);
-			INFO("data length %i", datalength);
-			firstrun = false;
-		}
-
-		// if output gate is on - CURRENTLY STUCK ON
-		if (outgateon)
-		{
-			// if wait time has elapsed
-			if (wait > params[LENGTH_PARAM].getValue())
+		if (!badcsv) {
+			// Logging some info about the data on first run.
+			if (firstrun)
 			{
-				// turn off the output gate
-				outputs[GATE_OUTPUT].setVoltage(0.f);
-				outgateon = false;
+				INFO("data min %f", datamin);
+				INFO("data max %f", datamax);
+				INFO("data length %i", datalength);
+				firstrun = false;
 			}
-			else
+
+			// if output gate is on
+			if (outgateon)
 			{
-				// If not, append to the wait variable
-				wait += args.sampleTime;
-			};
-		}
-		else
-		{ // If the gate isn't on
-
-			// and if a gate is high in the trigger input
-			if (ingate.process(inputs[TRIG_INPUT].getVoltage()))
-			{
-
-				// Increment the row number
-				row++;
-
-				// Check if row has hit max and loop if so
-				if (row == datalength)
+				// if wait time has elapsed
+				if (wait > params[LENGTH_PARAM].getValue())
 				{
-					row = 0;
-				}
-
-				// Calculate v/oct min and max
-				float voctmin;
-				float voctmax;
-
-				if (params[RANGE_PARAM].getValue() < 4)
-				{
-					voctmin = 0;
-					voctmax = params[RANGE_PARAM].getValue();
+					// turn off the output gate
+					outputs[GATE_OUTPUT].setVoltage(0.f);
+					outgateon = false;
 				}
 				else
 				{
-					voctmin = 4 - params[RANGE_PARAM].getValue();
-					voctmax = 4;
-				}
-
-				// Set the voltages to the data
-				outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, -5.f, 5.f));
-				outputs[ZEROTOTEN_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, 0.f, 10.f));
-				outputs[VOCT_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, voctmin, voctmax));
-
-				// Logging for info
-				// INFO("row %d", row);
-				// INFO("datapoint %f", data[row]);
-
-				// Turn the gate on and reset the wait time
-				outputs[GATE_OUTPUT].setVoltage(10.f);
-				outgateon = true;
-				wait = 0.f;
+					// If not, append to the wait variable
+					wait += args.sampleTime;
+				};
 			}
-		}
+			else
+			{ // If the gate isn't on
 
-		// If a reset is received, reset the row count
-		if (inputs[RESET_INPUT].getVoltage() > 0)
-		{
-			row = -1;
-		};
+				// and if a gate is high in the trigger input
+				if (ingate.process(inputs[TRIG_INPUT].getVoltage()))
+				{
+
+					// Increment the row number
+					row++;
+
+					// Check if row has hit max and loop if so
+					if (row == datalength)
+					{
+						row = 0;
+					}
+
+					// Calculate v/oct min and max
+					float voctmin;
+					float voctmax;
+
+					if (params[RANGE_PARAM].getValue() < 4)
+					{
+						voctmin = 0;
+						voctmax = params[RANGE_PARAM].getValue();
+					}
+					else
+					{
+						voctmin = 4 - params[RANGE_PARAM].getValue();
+						voctmax = 4;
+					}
+
+					// Set the voltages to the data
+					outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, -5.f, 5.f));
+					outputs[ZEROTOTEN_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, 0.f, 10.f));
+					outputs[VOCT_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, voctmin, voctmax));
+
+					// Logging for info
+					// INFO("row %d", row);
+					// INFO("datapoint %f", data[row]);
+
+					// Turn the gate on and reset the wait time
+					outputs[GATE_OUTPUT].setVoltage(10.f);
+					outgateon = true;
+					wait = 0.f;
+				}
+			}
+
+			// If a reset is received, reset the row count
+			if (inputs[RESET_INPUT].getVoltage() > 0)
+			{
+				row = -1;
+			};
+		}
 	};
 
 	// Function to load a CSV file
@@ -189,23 +192,29 @@ struct LoudNumbers : Module
 	{
 		INFO("Processing CSV");
 		
-		// Setting values that aren't numbers to 0 (rather than throwing error)
-		rapidcsv::Document doc(path, 
-							rapidcsv::LabelParams(),
-                           rapidcsv::SeparatorParams(),
-                           rapidcsv::ConverterParams(true /* pHasDefaultConverter */,
-                                                     0.0 /* pDefaultFloat */,
-                                                     1 /* pDefaultInteger */));
-		columns = doc.GetColumnNames();
-		data = doc.GetColumn<float>(columns[colnum]);
-		datamin = *std::min_element(data.begin(), data.end());
-		datamax = *std::max_element(data.begin(), data.end());
-		row = -1; // because the first thing we do is increment it
-		datalength = static_cast<int>(data.size());
-		columnslength = static_cast<int>(columns.size());
-		if (currentpath != path) {
-			colnum = 0;
-			currentpath = path;
+		try {
+			// Setting values that aren't numbers to 0 (rather than throwing error)
+			rapidcsv::Document doc(path, 
+								rapidcsv::LabelParams(),
+							rapidcsv::SeparatorParams(),
+							rapidcsv::ConverterParams(true /* pHasDefaultConverter */,
+														0.0 /* pDefaultFloat */,
+														1 /* pDefaultInteger */));
+			columns = doc.GetColumnNames();
+			data = doc.GetColumn<float>(columns[colnum]);
+			datamin = *std::min_element(data.begin(), data.end());
+			datamax = *std::max_element(data.begin(), data.end());
+			row = -1; // because the first thing we do is increment it
+			datalength = static_cast<int>(data.size());
+			columnslength = static_cast<int>(columns.size());
+			if (currentpath != path) {
+				colnum = 0;
+				currentpath = path;
+			}
+			badcsv = false;
+		} catch (...) {
+			badcsv = true;
+			WARN("ERROR: CSV file could not be read.");
 		}
  	}
 };
@@ -226,67 +235,72 @@ struct DataViz : Widget
 		// And we don't want to run this until 'module' has actually been set.
 		if (layer == 1 && module)
 		{	
-			// Write column name
-			//nvgText(args.vg, 0, 0, module->columns[module->column]);
-
-			// Draw the line
-			nvgBeginPath(args.vg);
-			bool firstpoint = true;
-			nvgMoveTo(args.vg, margin, height);
-
-			for (int d = 0; d < module->datalength; d++)
-			{
-				// Calculate x and y coords
-				float x = margin + (d * width / module->datalength);
-				// Y == zero at the TOP of the box.
-				float y = height - (scalemap(module->data[d], module->datamin, module->datamax,
-											 0.f, height));
-
-				if (firstpoint) {
-					nvgMoveTo(args.vg, x, y);
-					firstpoint = false;
-				} else {
-					nvgLineTo(args.vg, x, y);
-				}
-				
-			}
-
-			nvgStrokeColor(args.vg, color::fromHexString(module->faded));
-			nvgStrokeWidth(args.vg, mm2px(0.3));
-			nvgStroke(args.vg);
-			nvgClosePath(args.vg);
-
-			// Draw the circles
-			for (int d = 0; d < module->datalength; d++)
-			{
-
-				// Calculate x and y coords
-				float x = margin + (d * width / module->datalength);
-				// Y == zero at the TOP of the box.
-				float y = height - (scalemap(module->data[d], module->datamin, module->datamax,
-											 0.f, height));
-
-				// Draw a circle for each
+			if (module->badcsv) {
+				nvgFillColor(args.vg, color::fromHexString(module->white));
+				nvgFontSize(args.vg, 14);
+				nvgTextAlign(args.vg, NVG_ALIGN_CENTER);
+				nvgText(args.vg, width/2, height/2, "Invalid CSV", NULL);
+			} else {
+				// Draw the line
 				nvgBeginPath(args.vg);
+				bool firstpoint = true;
+				nvgMoveTo(args.vg, margin, height);
 
-				if (d == module->row)
+				for (int d = 0; d < module->datalength; d++)
 				{
-					nvgCircle(args.vg, x, y, mm2px(1.f));
-					nvgFillColor(args.vg, color::fromHexString(module->main));
-				}
-				else if (d == 0 && module->row == module->datalength)
-				{
-					nvgCircle(args.vg, x, y, mm2px(1.f));
-					nvgFillColor(args.vg, color::fromHexString(module->main));
-				}
-				else
-				{
-					nvgCircle(args.vg, x, y, mm2px(circ_size));
-					nvgFillColor(args.vg, color::fromHexString(module->faded));
+					// Calculate x and y coords
+					float x = margin + (d * width / module->datalength);
+					// Y == zero at the TOP of the box.
+					float y = height - (scalemap(module->data[d], module->datamin, module->datamax,
+												0.f, height));
+
+					if (firstpoint) {
+						nvgMoveTo(args.vg, x, y);
+						firstpoint = false;
+					} else {
+						nvgLineTo(args.vg, x, y);
+					}
+					
 				}
 
-				nvgFill(args.vg);
+				nvgStrokeColor(args.vg, color::fromHexString(module->faded));
+				nvgStrokeWidth(args.vg, mm2px(0.3));
+				nvgStroke(args.vg);
 				nvgClosePath(args.vg);
+
+				// Draw the circles
+				for (int d = 0; d < module->datalength; d++)
+				{
+
+					// Calculate x and y coords
+					float x = margin + (d * width / module->datalength);
+					// Y == zero at the TOP of the box.
+					float y = height - (scalemap(module->data[d], module->datamin, module->datamax,
+												0.f, height));
+
+					// Draw a circle for each
+					nvgBeginPath(args.vg);
+
+					if (d == module->row)
+					{
+						nvgCircle(args.vg, x, y, mm2px(1.f));
+						nvgFillColor(args.vg, color::fromHexString(module->main));
+					}
+					else if (d == 0 && module->row == module->datalength)
+					{
+						nvgCircle(args.vg, x, y, mm2px(1.f));
+						nvgFillColor(args.vg, color::fromHexString(module->main));
+					}
+					else
+					{
+						nvgCircle(args.vg, x, y, mm2px(circ_size));
+						nvgFillColor(args.vg, color::fromHexString(module->faded));
+					}
+
+					nvgFill(args.vg);
+					nvgClosePath(args.vg);
+				}
+
 			}
 		}
 		Widget::drawLayer(args, layer);
