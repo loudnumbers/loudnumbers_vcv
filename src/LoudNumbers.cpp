@@ -76,6 +76,30 @@ struct LoudNumbers : Module
 	bool firstrun = true;
 	float wait = 0.f;
 
+	// Save and retrieve menu choice(s).
+	json_t* dataToJson() override {
+		json_t* rootJ = json_object();
+		json_object_set_new(rootJ, "default_path", json_string(currentpath.c_str()));
+		json_object_set_new(rootJ, "default_column", json_integer(colnum));
+		return rootJ;
+	}
+	
+	void dataFromJson(json_t* rootJ) override {
+		json_t* default_colJ = json_object_get(rootJ, "default_column");
+		json_t* default_pathJ = json_object_get(rootJ, "default_path");
+		if (default_colJ) {
+			colnum = json_integer_value(default_colJ);
+		}
+		if (default_pathJ) {
+			std::string p = json_string_value(default_pathJ);
+			INFO("LOADING PATH: %s", p.c_str());
+			currentpath = p;
+			processCSV(currentpath);
+			csvloaded = true;
+		}
+		
+	}
+
 	// Trigger for incoming gate detection
 	dsp::SchmittTrigger ingate;
 
