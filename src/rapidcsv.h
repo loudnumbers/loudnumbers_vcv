@@ -101,7 +101,7 @@ namespace rapidcsv
      * @brief   Provides details about the exception
      * @returns an explanatory string
      */
-    virtual const char* what() const throw()
+    virtual const char* what() const throw() override
     {
       return "unsupported conversion datatype";
     }
