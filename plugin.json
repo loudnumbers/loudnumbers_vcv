@@ -8,14 +8,14 @@
   "authorEmail": "numbersloud@gmail.com",
   "authorUrl": "http://www.loudnumbers.net",
   "pluginUrl": "http://www.loudnumbers.net",
-  "manualUrl": "",
-  "sourceUrl": "",
+  "manualUrl": "https://github.com/loudnumbers/loudnumbers_vcv",
+  "sourceUrl": "https://github.com/loudnumbers/loudnumbers_vcv",
   "donateUrl": "",
-  "changelogUrl": "",
+  "changelogUrl": "https://github.com/loudnumbers/loudnumbers_vcv",
   "modules": [
     {
       "slug": "LoudNumbers",
-      "name": "LoudNumbers",
+      "name": "Loud Numbers",
       "description": "Data sonification",
       "tags": [
         "Sequencer",
