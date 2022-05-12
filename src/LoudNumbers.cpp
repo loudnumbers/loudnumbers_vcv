@@ -194,7 +194,7 @@ struct LoudNumbers : Module
 		std::string dir = asset::user("../");
 
 		// Get a path from the user
-		char *pathC = osdialog_file(OSDIALOG_OPEN, dir.c_str(), NULL, NULL);
+		char *pathC = osdialog_file(OSDIALOG_OPEN, dir.c_str(), NULL, osdialog_filters_parse("Source:csv"));
 
 		// If nothing gets chosen, don't do anything
 		if (!pathC)
