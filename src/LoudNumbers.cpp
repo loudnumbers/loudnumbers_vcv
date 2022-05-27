@@ -4,6 +4,11 @@
 #include <osdialog.h>
 #include "rapidcsv.h" //https://github.com/d99kris/rapidcsv
 
+std::vector<float> defaultdata{-0.267,-0.007,0.046,0.017,-0.049,0.038,0.014,0.048,-0.223,-0.14,-0.068,-0.074,-0.113,0.032,-0.027,-0.186,-0.065,0.062,-0.214,-0.149,-0.241,0.047,-0.062,0.057,0.092,0.14,0.011,0.194,-0.014,-0.03,0.045,0.192,0.198,0.118,0.296,0.254,0.105,0.148,0.208,0.325,0.183,0.39,0.539,0.306,0.294,0.441,0.496,0.505,0.447,0.545,0.506,0.491,0.395,0.506,0.56,0.425,0.47,0.514,0.579,0.763,0.797,0.677,0.597,0.736};
+float defaultdatamin = *std::min_element(defaultdata.begin(), defaultdata.end());
+float defaultdatamax = *std::max_element(defaultdata.begin(), defaultdata.end());
+int defaultdatalength = static_cast<int>(defaultdata.size());
+
 // This function scales a number from one range to another
 float scalemap(float x, float inmin, float inmax, float outmin, float outmax)
 {
@@ -326,6 +331,53 @@ struct DataViz : Widget
 				}
 
 			}
+		} else {
+			// Draw the line
+				nvgBeginPath(args.vg);
+				bool firstpoint = true;
+				nvgMoveTo(args.vg, margin, height);
+
+				for (int d = 0; d < defaultdatalength; d++)
+				{
+					if (!isnan(defaultdata[d])) {
+						// Calculate x and y coords
+						float x = margin + (d * width / defaultdatalength);
+						// Y == zero at the TOP of the box.
+						float y = height - (scalemap(defaultdata[d], defaultdatamin, defaultdatamax,
+													0.f, height));
+
+						if (firstpoint) {
+							nvgMoveTo(args.vg, x, y);
+							firstpoint = false;
+						} else {
+							nvgLineTo(args.vg, x, y);
+						}
+					}
+					
+				}
+
+				nvgStrokeColor(args.vg, color::fromHexString("#805279"));
+				nvgStrokeWidth(args.vg, mm2px(0.3));
+				nvgStroke(args.vg);
+				nvgClosePath(args.vg);
+
+				// Draw the circles
+				for (int d = 0; d < defaultdatalength; d++)
+				{
+
+					// Calculate x and y coords
+					float x = margin + (d * width / defaultdatalength);
+					// Y == zero at the TOP of the box.
+					float y = height - (scalemap(defaultdata[d], defaultdatamin, defaultdatamax,
+												0.f, height));
+
+					// Draw a circle for each
+					nvgBeginPath(args.vg);
+					nvgCircle(args.vg, x, y, mm2px(circ_size));
+					nvgFillColor(args.vg, color::fromHexString("#805279"));
+					nvgFill(args.vg);
+					nvgClosePath(args.vg);
+				}
 		}
 		Widget::drawLayer(args, layer);
 	}
