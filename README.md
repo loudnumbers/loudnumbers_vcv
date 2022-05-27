@@ -26,6 +26,10 @@ A: Data sonification is the process of turning data into sound. It's a bit like 
 
 A: Use [CSVLint](https://csvlint.io/) to check if your CSV is valid. If it is, submit an issue and attach the CSV file you're trying to load and I'll take a look.
 
+**Q: I'm getting crashes when loading a CSV file**
+
+This is likely a text encoding issue with the CSV library, which I'm [working on a solution for](https://github.com/loudnumbers/loudnumbers_vcv/issues/4). In the meantime, try re-encoding your csv file to UTF-8, which should fix it.
+
 **Q: How do I make the output sound more musical?**
 
 A: Process the pitch information through a quantizer and consider adjusting the length of your dataset to a multiple of four.
