@@ -339,19 +339,16 @@ struct DataViz : Widget
 
 				for (int d = 0; d < defaultdatalength; d++)
 				{
-					if (!isnan(defaultdata[d])) {
-						// Calculate x and y coords
-						float x = margin + (d * width / defaultdatalength);
-						// Y == zero at the TOP of the box.
-						float y = height - (scalemap(defaultdata[d], defaultdatamin, defaultdatamax,
-													0.f, height));
-
-						if (firstpoint) {
-							nvgMoveTo(args.vg, x, y);
-							firstpoint = false;
-						} else {
-							nvgLineTo(args.vg, x, y);
-						}
+					// Calculate x and y coords
+					float x = margin + (d * width / defaultdatalength);
+					// Y == zero at the TOP of the box.
+					float y = height - (scalemap(defaultdata[d], defaultdatamin, defaultdatamax,
+												0.f, height));
+					if (firstpoint) {
+						nvgMoveTo(args.vg, x, y);
+						firstpoint = false;
+					} else {
+						nvgLineTo(args.vg, x, y);
 					}
 					
 				}
