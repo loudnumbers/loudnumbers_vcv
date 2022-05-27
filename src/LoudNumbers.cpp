@@ -167,19 +167,21 @@ struct LoudNumbers : Module
 						voctmax = 4;
 					}
 
-					// Set the voltages to the data
-					outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, -5.f, 5.f));
-					outputs[ZEROTOTEN_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, 0.f, 10.f));
-					outputs[VOCT_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, voctmin, voctmax));
+					if (!isnan(data[row])) {
+						// Set the voltages to the data
+						outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, -5.f, 5.f));
+						outputs[ZEROTOTEN_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, 0.f, 10.f));
+						outputs[VOCT_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, voctmin, voctmax));
 
-					// Logging for info
-					// INFO("row %d", row);
-					// INFO("datapoint %f", data[row]);
+						// Logging for info
+						// INFO("row %d", row);
+						// INFO("datapoint %f", data[row]);
 
-					// Turn the gate on and reset the wait time
-					outputs[GATE_OUTPUT].setVoltage(10.f);
-					outgateon = true;
-					wait = 0.f;
+						// Turn the gate on and reset the wait time
+						outputs[GATE_OUTPUT].setVoltage(10.f);
+						outgateon = true;
+						wait = 0.f;
+					}
 				}
 			}
 
@@ -227,8 +229,8 @@ struct LoudNumbers : Module
 								rapidcsv::LabelParams(),
 							rapidcsv::SeparatorParams(),
 							rapidcsv::ConverterParams(true /* pHasDefaultConverter */,
-														0.0 /* pDefaultFloat */,
-														1 /* pDefaultInteger */));
+														NAN /* pDefaultFloat */,
+														NAN /* pDefaultInteger */));
 			columns = doc.GetColumnNames();
 			data = doc.GetColumn<float>(columns[colnum]);
 			datamin = *std::min_element(data.begin(), data.end());
@@ -277,17 +279,19 @@ struct DataViz : Widget
 
 				for (int d = 0; d < module->datalength; d++)
 				{
-					// Calculate x and y coords
-					float x = margin + (d * width / module->datalength);
-					// Y == zero at the TOP of the box.
-					float y = height - (scalemap(module->data[d], module->datamin, module->datamax,
-												0.f, height));
+					if (!isnan(module->data[d])) {
+						// Calculate x and y coords
+						float x = margin + (d * width / module->datalength);
+						// Y == zero at the TOP of the box.
+						float y = height - (scalemap(module->data[d], module->datamin, module->datamax,
+													0.f, height));
 
-					if (firstpoint) {
-						nvgMoveTo(args.vg, x, y);
-						firstpoint = false;
-					} else {
-						nvgLineTo(args.vg, x, y);
+						if (firstpoint) {
+							nvgMoveTo(args.vg, x, y);
+							firstpoint = false;
+						} else {
+							nvgLineTo(args.vg, x, y);
+						}
 					}
 					
 				}
