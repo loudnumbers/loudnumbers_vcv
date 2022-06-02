@@ -213,6 +213,9 @@ struct LoudNumbers : Module
 		std::string path = pathC;
 		std::free(pathC);
 
+		// Reset column number to 0
+		colnum = 0;
+
 		// Then do what you want with the path.
 		processCSV(path);
 		csvloaded = true;
