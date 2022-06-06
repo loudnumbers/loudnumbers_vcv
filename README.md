@@ -10,7 +10,7 @@ Install from the VCV Rack library.
 
 Right-click to load a CSV file, and then right-click again to select a column of data from that file.
 
-Your CSV file must have a single header row containing column names, and you'll only be able to sonify columns containing numbers. Any missing or non-numeric values in your data will be converted to zeros.
+Your CSV file must have a single header row containing column names, and you'll only be able to sonify columns containing numbers. Any missing or non-numeric values in your data will be replaced with null values that don't fire a gate.
 
 Send a trigger signal into the TRIG input to process the first datapoint and move to the next one. Send a trigger into the RESET input to return to the start of the dataset.
 
