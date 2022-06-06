@@ -1,6 +1,7 @@
 #include "plugin.hpp"
 #include <algorithm>
 #include <vector>
+#include <math.h>
 #include <osdialog.h>
 #define HAS_CODECVT
 #include "rapidcsv.h" //https://github.com/d99kris/rapidcsv
