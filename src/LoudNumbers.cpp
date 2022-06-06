@@ -400,14 +400,14 @@ struct LoudNumbersWidget : ModuleWidget
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(12.988, 78.221)), module, LoudNumbers::RANGE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(31.405, 78.221)), module, LoudNumbers::LENGTH_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(49.97, 78.221)), module, LoudNumbers::RANGE_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(68.387, 78.221)), module, LoudNumbers::LENGTH_PARAM));
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.988, 96.195)), module, LoudNumbers::TRIG_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(31.405, 96.195)), module, LoudNumbers::RESET_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.988, 78.221)), module, LoudNumbers::TRIG_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(31.405, 78.221)), module, LoudNumbers::RESET_INPUT));
 
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(49.97, 78.221)), module, LoudNumbers::MINUSFIVETOFIVE_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(68.387, 78.221)), module, LoudNumbers::ZEROTOTEN_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(12.988, 96.195)), module, LoudNumbers::MINUSFIVETOFIVE_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(31.405, 96.195)), module, LoudNumbers::ZEROTOTEN_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(49.97, 96.195)), module, LoudNumbers::VOCT_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(68.387, 96.195)), module, LoudNumbers::GATE_OUTPUT));
 
