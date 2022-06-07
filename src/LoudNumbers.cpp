@@ -168,7 +168,7 @@ struct LoudNumbers : Module
 						voctmax = 4;
 					}
 
-					if (!isnan(data[row])) {
+					if (!std::isnan(data[row])) {
 						// Set the voltages to the data
 						outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, -5.f, 5.f));
 						outputs[ZEROTOTEN_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, 0.f, 10.f));
@@ -283,7 +283,7 @@ struct DataViz : Widget
 
 				for (int d = 0; d < module->datalength; d++)
 				{
-					if (!isnan(module->data[d])) {
+					if (!std::isnan(module->data[d])) {
 						// Calculate x and y coords
 						float x = margin + (d * width / module->datalength);
 						// Y == zero at the TOP of the box.
