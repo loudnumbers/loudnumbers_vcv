@@ -191,6 +191,34 @@ struct LoudNumbers : Module
 			if (inputs[RESET_INPUT].getVoltage() > 0)
 			{
 				row = -1;
+
+				// Calculate v/oct min and max
+				float voctmin;
+				float voctmax;
+
+				if (params[RANGE_PARAM].getValue() < 4)
+				{
+					voctmin = 0;
+					voctmax = params[RANGE_PARAM].getValue();
+				}
+				else
+				{
+					voctmin = 4 - params[RANGE_PARAM].getValue();
+					voctmax = 4;
+				}
+
+				// Reset the outputs to the first datapoint if it's a number
+				if (!std::isnan(data[0])) {
+					outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(data[0], datamin, datamax, -5.f, 5.f));
+					outputs[ZEROTOTEN_OUTPUT].setVoltage(scalemap(data[0], datamin, datamax, 0.f, 10.f));
+					outputs[VOCT_OUTPUT].setVoltage(scalemap(data[0], datamin, datamax, voctmin, voctmax));
+					outputs[GATE_OUTPUT].setVoltage(0.f);
+				} else { // If not, reset to 0.
+					outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(0.f);
+					outputs[ZEROTOTEN_OUTPUT].setVoltage(0.f);
+					outputs[VOCT_OUTPUT].setVoltage(0.f);
+					outputs[GATE_OUTPUT].setVoltage(0.f);
+				}
 			};
 		}
 	};
