@@ -8,7 +8,7 @@
 
 std::vector<float> defaultdata{-0.267,-0.007,0.046,0.017,-0.049,0.038,0.014,0.048,-0.223,-0.14,-0.068,-0.074,-0.113,0.032,-0.027,-0.186,-0.065,0.062,-0.214,-0.149,-0.241,0.047,-0.062,0.057,0.092,0.14,0.011,0.194,-0.014,-0.03,0.045,0.192,0.198,0.118,0.296,0.254,0.105,0.148,0.208,0.325,0.183,0.39,0.539,0.306,0.294,0.441,0.496,0.505,0.447,0.545,0.506,0.491,0.395,0.506,0.56,0.425,0.47,0.514,0.579,0.763,0.797,0.677,0.597,0.736};
 float defaultdatamin = *std::min_element(defaultdata.begin(), defaultdata.end());
-float defaultdatamax = *std::max_element(defaultdata.begin(), defaultdata.end());
+float defaultdatamax = *std::max_element(defaultdata.begin(), defaultdata.end(), [] (float x, float y) {return x < y ? true : std::isnan(x);});
 int defaultdatalength = static_cast<int>(defaultdata.size());
 
 // This function scales a number from one range to another
@@ -64,7 +64,7 @@ struct LoudNumbers : Module
 	std::vector<std::string> columns{"Temps 1956-2019"};
 	std::vector<float> data{-0.267,-0.007,0.046,0.017,-0.049,0.038,0.014,0.048,-0.223,-0.14,-0.068,-0.074,-0.113,0.032,-0.027,-0.186,-0.065,0.062,-0.214,-0.149,-0.241,0.047,-0.062,0.057,0.092,0.14,0.011,0.194,-0.014,-0.03,0.045,0.192,0.198,0.118,0.296,0.254,0.105,0.148,0.208,0.325,0.183,0.39,0.539,0.306,0.294,0.441,0.496,0.505,0.447,0.545,0.506,0.491,0.395,0.506,0.56,0.425,0.47,0.514,0.579,0.763,0.797,0.677,0.597,0.736};
 	float datamin = *std::min_element(data.begin(), data.end());
-	float datamax = *std::max_element(data.begin(), data.end());
+	float datamax = *std::max_element(data.begin(), data.end(), [] (float x, float y) {return x < y ? true : std::isnan(x);});
 	int row = -1; // because the first thing we do is increment it
 	int datalength = static_cast<int>(data.size());
 	int columnslength = static_cast<int>(columns.size());
@@ -267,7 +267,8 @@ struct LoudNumbers : Module
 			columns = doc.GetColumnNames();
 			data = doc.GetColumn<float>(columns[colnum]);
 			datamin = *std::min_element(data.begin(), data.end());
-			datamax = *std::max_element(data.begin(), data.end());
+			datamax = *std::max_element(data.begin(), data.end(), [] (float x, float y) {return x < y ? true : std::isnan(x);});
+			firstrun = true;
 			row = -1; // because the first thing we do is increment it
 			datalength = static_cast<int>(data.size());
 			columnslength = static_cast<int>(columns.size());
@@ -321,6 +322,9 @@ struct DataViz : Widget
 
 						if (firstpoint) {
 							nvgMoveTo(args.vg, x, y);
+							// Logging to try to debug missing visualizations
+							//INFO("data %f", module->data[d]);
+							//INFO("y0 %f", y);
 							firstpoint = false;
 						} else {
 							nvgLineTo(args.vg, x, y);
@@ -379,8 +383,8 @@ struct DataViz : Widget
 					// Calculate x and y coords
 					float x = margin + (d * width / defaultdatalength);
 					// Y == zero at the TOP of the box.
-					float y = height - (scalemap(defaultdata[d], defaultdatamin, defaultdatamax,
-												0.f, height));
+					float y = (height - 3) - (scalemap(defaultdata[d], defaultdatamin, defaultdatamax,
+												0.f, height-6));
 					if (firstpoint) {
 						nvgMoveTo(args.vg, x, y);
 						firstpoint = false;
@@ -402,8 +406,8 @@ struct DataViz : Widget
 					// Calculate x and y coords
 					float x = margin + (d * width / defaultdatalength);
 					// Y == zero at the TOP of the box.
-					float y = height - (scalemap(defaultdata[d], defaultdatamin, defaultdatamax,
-												0.f, height));
+					float y = (height - 3) - (scalemap(defaultdata[d], defaultdatamin, defaultdatamax,
+												0.f, height-6));
 
 					// Draw a circle for each
 					nvgBeginPath(args.vg);
