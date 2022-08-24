@@ -294,7 +294,7 @@ struct DataViz : Widget
 	{
 		float width = box.size.x - 2 * margin;
 		float height = box.size.y - 2 * margin;
-		float circ_size = 0.5;
+		float circ_size = 0.2;
 		// The API states that the module  should only write to layer 1.
 		// And we don't want to run this until 'module' has actually been set.
 		if (layer == 1 && module)
@@ -316,8 +316,8 @@ struct DataViz : Widget
 						// Calculate x and y coords
 						float x = margin + (d * width / module->datalength);
 						// Y == zero at the TOP of the box.
-						float y = height - (scalemap(module->data[d], module->datamin, module->datamax,
-													0.f, height));
+						float y = (height - 3) - (scalemap(module->data[d], module->datamin, module->datamax,
+													0.f, height-6));
 
 						if (firstpoint) {
 							nvgMoveTo(args.vg, x, y);
@@ -341,8 +341,8 @@ struct DataViz : Widget
 					// Calculate x and y coords
 					float x = margin + (d * width / module->datalength);
 					// Y == zero at the TOP of the box.
-					float y = height - (scalemap(module->data[d], module->datamin, module->datamax,
-												0.f, height));
+					float y = (height - 3) - (scalemap(module->data[d], module->datamin, module->datamax,
+													0.f, height-6));
 
 					// Draw a circle for each
 					nvgBeginPath(args.vg);
