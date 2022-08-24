@@ -34,6 +34,7 @@ struct LoudNumbers : Module
 	};
 	enum OutputId
 	{
+		END_OUTPUT,
 		MINUSFIVETOFIVE_OUTPUT,
 		ZEROTOTEN_OUTPUT,
 		VOCT_OUTPUT,
@@ -53,6 +54,7 @@ struct LoudNumbers : Module
 		configParam(LENGTH_PARAM, 0.001f, 1.f, 0.1f, "Gate length", " s");
 		configInput(TRIG_INPUT, "Trigger");
 		configInput(RESET_INPUT, "Reset");
+		configOutput(END_OUTPUT, "End of Data Trigger");
 		configOutput(MINUSFIVETOFIVE_OUTPUT, "-5V to 5V");
 		configOutput(ZEROTOTEN_OUTPUT, "0 to 10V");
 		configOutput(VOCT_OUTPUT, "Volts per octave");
@@ -79,7 +81,7 @@ struct LoudNumbers : Module
 
 	// Variables to track whether gate out is happening
 	bool outgateon = false;
-	bool ingateon = false;
+	//bool ingateon = false;
 	bool firstrun = true;
 	float wait = 0.f;
 
@@ -109,6 +111,7 @@ struct LoudNumbers : Module
 
 	// Trigger for incoming gate detection
 	dsp::SchmittTrigger ingate;
+	dsp::PulseGenerator resetPulse;
 
 	void process(const ProcessArgs &args) override
 	{
@@ -149,9 +152,10 @@ struct LoudNumbers : Module
 					row++;
 
 					// Check if row has hit max and loop if so
-					if (row == datalength)
+					if (row >= datalength)
 					{
-						row = 0;
+						INFO("Reached end of data");
+						resetPulse.trigger(0.01);
 					}
 
 					// Calculate v/oct min and max
@@ -169,7 +173,7 @@ struct LoudNumbers : Module
 						voctmax = 4;
 					}
 
-					if (!std::isnan(data[row])) {
+					if (!std::isnan(data[row]) && row < datalength) {
 						// Set the voltages to the data
 						outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, -5.f, 5.f));
 						outputs[ZEROTOTEN_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, 0.f, 10.f));
@@ -186,6 +190,10 @@ struct LoudNumbers : Module
 					}
 				}
 			}
+
+			// Activate reset pulse if triggered
+			bool rpulse = resetPulse.process(1.0 / args.sampleRate);
+			outputs[END_OUTPUT].setVoltage(rpulse ? 10.0 : 0.0);
 
 			// If a reset is received, reset the row count
 			if (inputs[RESET_INPUT].getVoltage() > 0)
@@ -433,16 +441,17 @@ struct LoudNumbersWidget : ModuleWidget
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(49.97, 78.221)), module, LoudNumbers::RANGE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(68.387, 78.221)), module, LoudNumbers::LENGTH_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(56.03, 78.221)), module, LoudNumbers::RANGE_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(71.36, 78.221)), module, LoudNumbers::LENGTH_PARAM));
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.988, 78.221)), module, LoudNumbers::TRIG_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(31.405, 78.221)), module, LoudNumbers::RESET_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10, 78.221)), module, LoudNumbers::TRIG_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(25.34, 78.221)), module, LoudNumbers::RESET_INPUT));
 
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(12.988, 96.195)), module, LoudNumbers::MINUSFIVETOFIVE_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(31.405, 96.195)), module, LoudNumbers::ZEROTOTEN_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(49.97, 96.195)), module, LoudNumbers::VOCT_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(68.387, 96.195)), module, LoudNumbers::GATE_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(10, 96.195)), module, LoudNumbers::END_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(25.34, 96.195)), module, LoudNumbers::MINUSFIVETOFIVE_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(40.69, 96.195)), module, LoudNumbers::ZEROTOTEN_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(56.03, 96.195)), module, LoudNumbers::VOCT_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(71.36, 96.195)), module, LoudNumbers::GATE_OUTPUT));
 
 		// Load and display dataviz widget
 		DataViz *data_viz = createWidget<DataViz>(mm2px(Vec(6.736, 17.647)));
