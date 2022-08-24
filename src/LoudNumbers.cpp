@@ -220,12 +220,10 @@ struct LoudNumbers : Module
 					outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(data[0], datamin, datamax, -5.f, 5.f));
 					outputs[ZEROTOTEN_OUTPUT].setVoltage(scalemap(data[0], datamin, datamax, 0.f, 10.f));
 					outputs[VOCT_OUTPUT].setVoltage(scalemap(data[0], datamin, datamax, voctmin, voctmax));
-					outputs[GATE_OUTPUT].setVoltage(0.f);
 				} else { // If not, reset to 0.
 					outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(0.f);
 					outputs[ZEROTOTEN_OUTPUT].setVoltage(0.f);
 					outputs[VOCT_OUTPUT].setVoltage(0.f);
-					outputs[GATE_OUTPUT].setVoltage(0.f);
 				}
 			};
 		}
