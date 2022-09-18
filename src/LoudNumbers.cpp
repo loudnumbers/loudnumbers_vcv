@@ -116,13 +116,17 @@ struct LoudNumbers : Module
 
 	// Trigger for incoming gate detection
 	dsp::SchmittTrigger ingate;
+	dsp::SchmittTrigger resetgate;
 	dsp::PulseGenerator gatePulse;
-	dsp::PulseGenerator resetPulse;
+	dsp::PulseGenerator endPulse;
 
+	// On a loop
 	void process(const ProcessArgs &args) override
-	{
+	{	
+		// As long as it's not a bad CSV
 		if (!badcsv) {
-			// Logging some info about the data on first run.
+
+			// Log some info about the data on first run.
 			if (firstrun)
 			{
 				INFO("data min: %f", datamin);
@@ -132,8 +136,9 @@ struct LoudNumbers : Module
 			}
 
 			// If a reset is received, reset the row count
-			if (inputs[RESET_INPUT].getVoltage() > 0)
+			if (resetgate.process(inputs[RESET_INPUT].getVoltage()))
 			{
+
 				row = -1;
 
 				// Calculate v/oct min and max
@@ -163,18 +168,18 @@ struct LoudNumbers : Module
 				}
 			};
 
-			// Check if row has hit max and loop if so
-			if (row >= datalength)
-			{
-				INFO("Reached end of data");
-				resetPulse.trigger(0.01);
-			}
-			
-			// and if a gate is high in the trigger input
+			// If a gate is high in the trigger input
 			if (ingate.process(inputs[TRIG_INPUT].getVoltage()))
 			{
 				// Increment the row number
 				row++;
+
+				// Check if row has hit max and loop if so
+				if (row >= datalength)
+				{
+					INFO("Reached end of data");
+					endPulse.trigger(0.01);
+				}
 
 				// Calculate v/oct min and max
 				float voctmin;
@@ -191,13 +196,13 @@ struct LoudNumbers : Module
 					voctmax = 4;
 				}
 
-				if (!std::isnan(data[row]) && row < datalength) {
+				// If it's not a NaN value and it's within the range of the data
+				if (!std::isnan(data[row]) && row <= datalength) {
 					// Set the voltages to the data
 					outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, -5.f, 5.f));
 					outputs[ZEROTOTEN_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, 0.f, 10.f));
 					outputs[VOCT_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, voctmin, voctmax));
 					gatePulse.trigger(params[LENGTH_PARAM].getValue());
-					INFO("datapoint: %f", data[row]);
 				}
 			}
 
@@ -206,8 +211,8 @@ struct LoudNumbers : Module
 			outputs[GATE_OUTPUT].setVoltage(gpulse ? 10.0 : 0.0);
 
 			// Activate reset pulse if triggered
-			bool rpulse = resetPulse.process(1.0 / args.sampleRate);
-			outputs[END_OUTPUT].setVoltage(rpulse ? 10.0 : 0.0);
+			bool epulse = endPulse.process(1.0 / args.sampleRate);
+			outputs[END_OUTPUT].setVoltage(epulse ? 10.0 : 0.0);
 
 		}
 	};
