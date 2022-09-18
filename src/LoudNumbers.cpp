@@ -1,6 +1,7 @@
 #include "plugin.hpp"
-#include <algorithm>
 #include <vector>
+#include <algorithm>
+#include <iterator>
 #include <math.h>
 #include <osdialog.h>
 #define HAS_CODECVT
@@ -8,8 +9,9 @@
 
 std::vector<float> defaultdata{-0.267,-0.007,0.046,0.017,-0.049,0.038,0.014,0.048,-0.223,-0.14,-0.068,-0.074,-0.113,0.032,-0.027,-0.186,-0.065,0.062,-0.214,-0.149,-0.241,0.047,-0.062,0.057,0.092,0.14,0.011,0.194,-0.014,-0.03,0.045,0.192,0.198,0.118,0.296,0.254,0.105,0.148,0.208,0.325,0.183,0.39,0.539,0.306,0.294,0.441,0.496,0.505,0.447,0.545,0.506,0.491,0.395,0.506,0.56,0.425,0.47,0.514,0.579,0.763,0.797,0.677,0.597,0.736};
 float defaultdatamin = *std::min_element(defaultdata.begin(), defaultdata.end());
-float defaultdatamax = *std::max_element(defaultdata.begin(), defaultdata.end(), [] (float x, float y) {return x < y ? true : std::isnan(x);});
+float defaultdatamax = *std::max_element(defaultdata.begin(), defaultdata.end());
 int defaultdatalength = static_cast<int>(defaultdata.size());
+
 
 // This function scales a number from one range to another
 float scalemap(float x, float inmin, float inmax, float outmin, float outmax)
@@ -65,8 +67,14 @@ struct LoudNumbers : Module
 	std::string currentpath = "none";
 	std::vector<std::string> columns{"Temps 1956-2019"};
 	std::vector<float> data{-0.267,-0.007,0.046,0.017,-0.049,0.038,0.014,0.048,-0.223,-0.14,-0.068,-0.074,-0.113,0.032,-0.027,-0.186,-0.065,0.062,-0.214,-0.149,-0.241,0.047,-0.062,0.057,0.092,0.14,0.011,0.194,-0.014,-0.03,0.045,0.192,0.198,0.118,0.296,0.254,0.105,0.148,0.208,0.325,0.183,0.39,0.539,0.306,0.294,0.441,0.496,0.505,0.447,0.545,0.506,0.491,0.395,0.506,0.56,0.425,0.47,0.514,0.579,0.763,0.797,0.677,0.597,0.736};
-	float datamin = *std::min_element(data.begin(), data.end());
-	float datamax = *std::max_element(data.begin(), data.end(), [] (float x, float y) {return x < y ? true : std::isnan(x);});
+	
+	// Copy data to a new minmax vector
+	std::vector<float> minmax_data = data;
+
+	// Calculate minmax from the stripped vector	
+	float datamin = *std::min_element(minmax_data.begin(), minmax_data.end());
+	float datamax = *std::max_element(minmax_data.begin(), minmax_data.end());
+
 	int row = -1; // because the first thing we do is increment it
 	int datalength = static_cast<int>(data.size());
 	int columnslength = static_cast<int>(columns.size());
@@ -238,7 +246,7 @@ struct LoudNumbers : Module
 		INFO("Processing CSV");
 		
 		try {
-			// Setting values that aren't numbers to 0 (rather than throwing error)
+			// Setting values that aren't numbers to NaN (rather than throwing error)
 			rapidcsv::Document doc(path, 
 								rapidcsv::LabelParams(),
 							rapidcsv::SeparatorParams(),
@@ -247,8 +255,17 @@ struct LoudNumbers : Module
 														NAN /* pDefaultInteger */));
 			columns = doc.GetColumnNames();
 			data = doc.GetColumn<float>(columns[colnum]);
-			datamin = *std::min_element(data.begin(), data.end());
-			datamax = *std::max_element(data.begin(), data.end(), [] (float x, float y) {return x < y ? true : std::isnan(x);});
+	
+			// Copy data to a new minmax vector
+			std::vector<float> minmax_data(data);
+
+			// Strip NaN values from it
+			minmax_data.erase(std::remove_if(std::begin(minmax_data), std::end(minmax_data),[](const float& value) { return std::isnan(value); }),std::end(minmax_data));
+
+			// Calculate minmax from the stripped vector	
+			datamin = *std::min_element(minmax_data.begin(), minmax_data.end());
+			datamax = *std::max_element(minmax_data.begin(), minmax_data.end());
+
 			firstrun = true;
 			row = -1; // because the first thing we do is increment it
 			datalength = static_cast<int>(data.size());
