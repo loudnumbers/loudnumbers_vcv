@@ -79,11 +79,8 @@ struct LoudNumbers : Module
 	std::string faded = "#805279";
 	std::string white = "#FFFBE4";
 
-	// Variables to track whether gate out is happening
-	bool outgateon = false;
-	//bool ingateon = false;
+	// Variables to track what's happening
 	bool firstrun = true;
-	float wait = 0.f;
 
 	// Save and retrieve menu choice(s).
 	json_t* dataToJson() override {
@@ -111,6 +108,7 @@ struct LoudNumbers : Module
 
 	// Trigger for incoming gate detection
 	dsp::SchmittTrigger ingate;
+	dsp::PulseGenerator gatePulse;
 	dsp::PulseGenerator resetPulse;
 
 	void process(const ProcessArgs &args) override
@@ -119,81 +117,11 @@ struct LoudNumbers : Module
 			// Logging some info about the data on first run.
 			if (firstrun)
 			{
-				INFO("data min %f", datamin);
-				INFO("data max %f", datamax);
-				INFO("data length %i", datalength);
+				INFO("data min: %f", datamin);
+				INFO("data max: %f", datamax);
+				INFO("data length: %i", datalength);
 				firstrun = false;
 			}
-
-			// if output gate is on
-			if (outgateon)
-			{
-				// if wait time has elapsed
-				if (wait > params[LENGTH_PARAM].getValue())
-				{
-					// turn off the output gate
-					outputs[GATE_OUTPUT].setVoltage(0.f);
-					outgateon = false;
-				}
-				else
-				{
-					// If not, append to the wait variable
-					wait += args.sampleTime;
-				};
-			}
-			else
-			{ // If the gate isn't on
-
-				// and if a gate is high in the trigger input
-				if (ingate.process(inputs[TRIG_INPUT].getVoltage()))
-				{
-
-					// Increment the row number
-					row++;
-
-					// Check if row has hit max and loop if so
-					if (row >= datalength)
-					{
-						INFO("Reached end of data");
-						resetPulse.trigger(0.01);
-					}
-
-					// Calculate v/oct min and max
-					float voctmin;
-					float voctmax;
-
-					if (params[RANGE_PARAM].getValue() < 4)
-					{
-						voctmin = 0;
-						voctmax = params[RANGE_PARAM].getValue();
-					}
-					else
-					{
-						voctmin = 4 - params[RANGE_PARAM].getValue();
-						voctmax = 4;
-					}
-
-					if (!std::isnan(data[row]) && row < datalength) {
-						// Set the voltages to the data
-						outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, -5.f, 5.f));
-						outputs[ZEROTOTEN_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, 0.f, 10.f));
-						outputs[VOCT_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, voctmin, voctmax));
-
-						// Logging for info
-						// INFO("row %d", row);
-						// INFO("datapoint %f", data[row]);
-
-						// Turn the gate on and reset the wait time
-						outputs[GATE_OUTPUT].setVoltage(10.f);
-						outgateon = true;
-						wait = 0.f;
-					}
-				}
-			}
-
-			// Activate reset pulse if triggered
-			bool rpulse = resetPulse.process(1.0 / args.sampleRate);
-			outputs[END_OUTPUT].setVoltage(rpulse ? 10.0 : 0.0);
 
 			// If a reset is received, reset the row count
 			if (inputs[RESET_INPUT].getVoltage() > 0)
@@ -226,6 +154,53 @@ struct LoudNumbers : Module
 					outputs[VOCT_OUTPUT].setVoltage(0.f);
 				}
 			};
+
+			// Check if row has hit max and loop if so
+			if (row >= datalength)
+			{
+				INFO("Reached end of data");
+				resetPulse.trigger(0.01);
+			}
+			
+			// and if a gate is high in the trigger input
+			if (ingate.process(inputs[TRIG_INPUT].getVoltage()))
+			{
+				// Increment the row number
+				row++;
+
+				// Calculate v/oct min and max
+				float voctmin;
+				float voctmax;
+
+				if (params[RANGE_PARAM].getValue() < 4)
+				{
+					voctmin = 0;
+					voctmax = params[RANGE_PARAM].getValue();
+				}
+				else
+				{
+					voctmin = 4 - params[RANGE_PARAM].getValue();
+					voctmax = 4;
+				}
+
+				if (!std::isnan(data[row]) && row < datalength) {
+					// Set the voltages to the data
+					outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, -5.f, 5.f));
+					outputs[ZEROTOTEN_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, 0.f, 10.f));
+					outputs[VOCT_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, voctmin, voctmax));
+					gatePulse.trigger(params[LENGTH_PARAM].getValue());
+					INFO("datapoint: %f", data[row]);
+				}
+			}
+
+			// Activate gate pulse if triggered
+			bool gpulse = gatePulse.process(1.0 / args.sampleRate);
+			outputs[GATE_OUTPUT].setVoltage(gpulse ? 10.0 : 0.0);
+
+			// Activate reset pulse if triggered
+			bool rpulse = resetPulse.process(1.0 / args.sampleRate);
+			outputs[END_OUTPUT].setVoltage(rpulse ? 10.0 : 0.0);
+
 		}
 	};
 
