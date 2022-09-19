@@ -193,7 +193,6 @@ struct LoudNumbers : Module
 			{
 				rowadvanced = false;
 
-					INFO("Reached end of data");
 				// Get v/oct min and max
 				float voctmin;
 				float voctmax;
@@ -335,9 +334,6 @@ struct DataViz : Widget
 
 						if (firstpoint) {
 							nvgMoveTo(args.vg, x, y);
-							// Logging to try to debug missing visualizations
-							//INFO("data %f", module->data[d]);
-							//INFO("y0 %f", y);
 							firstpoint = false;
 						} else {
 							nvgLineTo(args.vg, x, y);
