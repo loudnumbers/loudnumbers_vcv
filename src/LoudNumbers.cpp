@@ -160,6 +160,7 @@ struct LoudNumbers : Module
 			if (resetgate.process(inputs[RESET_INPUT].getVoltage()))
 			{
 				row = 0;
+				rowadvanced = true;
 
 				// Calculate v/oct min and max
 				float voctmin;
