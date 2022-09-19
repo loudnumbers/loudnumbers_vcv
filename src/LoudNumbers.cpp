@@ -308,7 +308,7 @@ struct DataViz : Widget
 	{
 		float width = box.size.x - 2 * margin;
 		float height = box.size.y - 2 * margin;
-		float circ_size = 0.2;
+		float circ_size = 1.f;
 		// The API states that the module  should only write to layer 1.
 		// And we don't want to run this until 'module' has actually been set.
 		if (layer == 1 && module)
