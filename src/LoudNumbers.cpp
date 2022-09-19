@@ -260,7 +260,7 @@ struct LoudNumbers : Module
 														NAN /* pDefaultInteger */));
 			columns = doc.GetColumnNames();
 			data = doc.GetColumn<float>(columns[colnum]);
-	
+
 			// Copy data to a new minmax vector
 			std::vector<float> minmax_data(data);
 
@@ -280,6 +280,7 @@ struct LoudNumbers : Module
 				currentpath = path;
 			}
 			badcsv = false;
+
 		} catch (...) {
 			badcsv = true;
 			WARN("ERROR: CSV file could not be read.");
