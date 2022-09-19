@@ -318,7 +318,7 @@ struct DataViz : Widget
 				{
 					if (!std::isnan(module->data[d])) {
 						// Calculate x and y coords
-						float x = margin + (d * width / module->datalength);
+						float x = margin + (d * width / (module->datalength - 1));
 						// Y == zero at the TOP of the box.
 						float y = (height - 3) - (scalemap(module->data[d], module->datamin, module->datamax,
 													0.f, height-6));
@@ -346,7 +346,7 @@ struct DataViz : Widget
 				{
 
 					// Calculate x and y coords
-					float x = margin + (d * width / module->datalength);
+					float x = margin + (d * width / (module->datalength - 1));
 					// Y == zero at the TOP of the box.
 					float y = (height - 3) - (scalemap(module->data[d], module->datamin, module->datamax,
 													0.f, height-6));
