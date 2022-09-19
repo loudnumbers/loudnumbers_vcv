@@ -89,6 +89,7 @@ struct LoudNumbers : Module
 
 	// Variables to track what's happening
 	bool firstrun = true;
+	bool rowadvanced = false;
 
 	// Save and retrieve menu choice(s).
 	json_t* dataToJson() override {
@@ -134,12 +135,31 @@ struct LoudNumbers : Module
 				INFO("data length: %i", datalength);
 				firstrun = false;
 			}
+			
+			// If a gate is high in the trigger input, advance the row and set rowadvanced flag
+			if (ingate.process(inputs[TRIG_INPUT].getVoltage()))
+			{	
+				// Increment the row number
+				row++;
 
-			// If a reset is received, reset the row count
+				// Check if row has hit max and trigger an end pulse if so
+				if (row >= datalength)
+				{
+					endPulse.trigger(0.01);
+				}
+				
+				// Get ready to play a note
+				rowadvanced = true;
+			}
+
+			// Activate end pulse if triggered
+			bool epulse = endPulse.process(1.0 / args.sampleRate);
+			outputs[END_OUTPUT].setVoltage(epulse ? 10.0 : 0.0);
+
+			// If a reset gate is received, set reset flag
 			if (resetgate.process(inputs[RESET_INPUT].getVoltage()))
 			{
-
-				row = -1;
+				row = 0;
 
 				// Calculate v/oct min and max
 				float voctmin;
@@ -166,22 +186,15 @@ struct LoudNumbers : Module
 					outputs[ZEROTOTEN_OUTPUT].setVoltage(0.f);
 					outputs[VOCT_OUTPUT].setVoltage(0.f);
 				}
-			};
+			} 
 
-			// If a gate is high in the trigger input
-			if (ingate.process(inputs[TRIG_INPUT].getVoltage()))
+			// If rowadvanced flag is set
+			if (rowadvanced && row < datalength) 
 			{
-				// Increment the row number
-				row++;
+				rowadvanced = false;
 
-				// Check if row has hit max and loop if so
-				if (row >= datalength)
-				{
 					INFO("Reached end of data");
-					endPulse.trigger(0.01);
-				}
-
-				// Calculate v/oct min and max
+				// Get v/oct min and max
 				float voctmin;
 				float voctmax;
 
@@ -197,7 +210,7 @@ struct LoudNumbers : Module
 				}
 
 				// If it's not a NaN value and it's within the range of the data
-				if (!std::isnan(data[row]) && row <= datalength) {
+				if (!std::isnan(data[row]) || row >= datalength) {
 					// Set the voltages to the data
 					outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, -5.f, 5.f));
 					outputs[ZEROTOTEN_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, 0.f, 10.f));
@@ -209,10 +222,6 @@ struct LoudNumbers : Module
 			// Activate gate pulse if triggered
 			bool gpulse = gatePulse.process(1.0 / args.sampleRate);
 			outputs[GATE_OUTPUT].setVoltage(gpulse ? 10.0 : 0.0);
-
-			// Activate reset pulse if triggered
-			bool epulse = endPulse.process(1.0 / args.sampleRate);
-			outputs[END_OUTPUT].setVoltage(epulse ? 10.0 : 0.0);
 
 		}
 	};
