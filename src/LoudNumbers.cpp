@@ -351,7 +351,7 @@ struct DataViz : Widget
 				nvgStroke(args.vg);
 				nvgClosePath(args.vg);
 
-				// Draw the circles
+				// Draw the circle
 				for (int d = 0; d < module->datalength; d++)
 				{
 
@@ -366,18 +366,8 @@ struct DataViz : Widget
 
 					if (d == module->row)
 					{
-						nvgCircle(args.vg, x, y, mm2px(1.f));
-						nvgFillColor(args.vg, color::fromHexString(module->main));
-					}
-					else if (d == 0 && module->row == module->datalength)
-					{
-						nvgCircle(args.vg, x, y, mm2px(1.f));
-						nvgFillColor(args.vg, color::fromHexString(module->main));
-					}
-					else
-					{
 						nvgCircle(args.vg, x, y, mm2px(circ_size));
-						nvgFillColor(args.vg, color::fromHexString(module->faded));
+						nvgFillColor(args.vg, color::fromHexString(module->main));
 					}
 
 					nvgFill(args.vg);
