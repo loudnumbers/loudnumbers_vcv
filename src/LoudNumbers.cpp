@@ -12,7 +12,6 @@ float defaultdatamin = *std::min_element(defaultdata.begin(), defaultdata.end())
 float defaultdatamax = *std::max_element(defaultdata.begin(), defaultdata.end());
 int defaultdatalength = static_cast<int>(defaultdata.size());
 
-
 // This function scales a number from one range to another
 float scalemap(float x, float inmin, float inmax, float outmin, float outmax)
 {
@@ -67,13 +66,10 @@ struct LoudNumbers : Module
 	std::string currentpath = "none";
 	std::vector<std::string> columns{"Temps 1956-2019"};
 	std::vector<float> data{-0.267,-0.007,0.046,0.017,-0.049,0.038,0.014,0.048,-0.223,-0.14,-0.068,-0.074,-0.113,0.032,-0.027,-0.186,-0.065,0.062,-0.214,-0.149,-0.241,0.047,-0.062,0.057,0.092,0.14,0.011,0.194,-0.014,-0.03,0.045,0.192,0.198,0.118,0.296,0.254,0.105,0.148,0.208,0.325,0.183,0.39,0.539,0.306,0.294,0.441,0.496,0.505,0.447,0.545,0.506,0.491,0.395,0.506,0.56,0.425,0.47,0.514,0.579,0.763,0.797,0.677,0.597,0.736};
-	
-	// Copy data to a new minmax vector
-	std::vector<float> minmax_data = data;
 
 	// Calculate minmax from the stripped vector	
-	float datamin = *std::min_element(minmax_data.begin(), minmax_data.end());
-	float datamax = *std::max_element(minmax_data.begin(), minmax_data.end());
+	float datamin = *std::min_element(data.begin(), data.end());
+	float datamax = *std::max_element(data.begin(), data.end());
 
 	int row = -1; // because the first thing we do is increment it
 	int datalength = static_cast<int>(data.size());
@@ -190,32 +186,34 @@ struct LoudNumbers : Module
 			} 
 
 			// If rowadvanced flag is set
-			if (rowadvanced && row < datalength) 
+			if (rowadvanced) 
 			{
-				rowadvanced = false;
+				if (row < datalength) {
+					rowadvanced = false;
 
-				// Get v/oct min and max
-				float voctmin;
-				float voctmax;
+					// Get v/oct min and max
+					float voctmin;
+					float voctmax;
 
-				if (params[RANGE_PARAM].getValue() < 4)
-				{
-					voctmin = 0;
-					voctmax = params[RANGE_PARAM].getValue();
-				}
-				else
-				{
-					voctmin = 4 - params[RANGE_PARAM].getValue();
-					voctmax = 4;
-				}
+					if (params[RANGE_PARAM].getValue() < 4)
+					{
+						voctmin = 0;
+						voctmax = params[RANGE_PARAM].getValue();
+					}
+					else
+					{
+						voctmin = 4 - params[RANGE_PARAM].getValue();
+						voctmax = 4;
+					}
 
-				// If it's not a NaN value and it's within the range of the data
-				if (!std::isnan(data[row]) || row >= datalength) {
-					// Set the voltages to the data
-					outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, -5.f, 5.f));
-					outputs[ZEROTOTEN_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, 0.f, 10.f));
-					outputs[VOCT_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, voctmin, voctmax));
-					gatePulse.trigger(params[LENGTH_PARAM].getValue());
+					// If it's not a NaN value and it's within the range of the data
+					if (!std::isnan(data[row]) || row >= datalength) {
+						// Set the voltages to the data
+						outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, -5.f, 5.f));
+						outputs[ZEROTOTEN_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, 0.f, 10.f));
+						outputs[VOCT_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, voctmin, voctmax));
+						gatePulse.trigger(params[LENGTH_PARAM].getValue());
+					}
 				}
 			}
 
@@ -351,24 +349,20 @@ struct DataViz : Widget
 				// Draw the circle
 				for (int d = 0; d < module->datalength; d++)
 				{
-
-					// Calculate x and y coords
-					float x = margin + (d * width / (module->datalength - 1));
-					// Y == zero at the TOP of the box.
-					float y = (height - 3) - (scalemap(module->data[d], module->datamin, module->datamax,
-													0.f, height-6));
-
-					// Draw a circle for each
-					nvgBeginPath(args.vg);
-
 					if (d == module->row)
 					{
+						// Calculate x and y coords
+						float x = margin + (d * width / (module->datalength - 1));
+						// Y == zero at the TOP of the box.
+						float y = (height - 3) - (scalemap(module->data[d], module->datamin, module->datamax,
+														0.f, height-6));
+						// Draw a circle for each
+						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, x, y, mm2px(circ_size));
 						nvgFillColor(args.vg, color::fromHexString(module->main));
+						nvgFill(args.vg);
+						nvgClosePath(args.vg);
 					}
-
-					nvgFill(args.vg);
-					nvgClosePath(args.vg);
 				}
 
 			}
@@ -399,23 +393,6 @@ struct DataViz : Widget
 				nvgStroke(args.vg);
 				nvgClosePath(args.vg);
 
-				// Draw the circles
-				for (int d = 0; d < defaultdatalength; d++)
-				{
-
-					// Calculate x and y coords
-					float x = margin + (d * width / defaultdatalength);
-					// Y == zero at the TOP of the box.
-					float y = (height - 3) - (scalemap(defaultdata[d], defaultdatamin, defaultdatamax,
-												0.f, height-6));
-
-					// Draw a circle for each
-					nvgBeginPath(args.vg);
-					nvgCircle(args.vg, x, y, mm2px(circ_size));
-					nvgFillColor(args.vg, color::fromHexString("#805279"));
-					nvgFill(args.vg);
-					nvgClosePath(args.vg);
-				}
 		}
 		Widget::drawLayer(args, layer);
 	}
