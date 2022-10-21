@@ -89,10 +89,14 @@ struct LoudNumbers : Module
 
 	// Save and retrieve menu choice(s).
 	json_t* dataToJson() override {
-		json_t* rootJ = json_object();
-		json_object_set_new(rootJ, "default_path", json_string(currentpath.c_str()));
-		json_object_set_new(rootJ, "default_column", json_integer(colnum));
-		return rootJ;
+		if (csvloaded) {
+			json_t* rootJ = json_object();
+			json_object_set_new(rootJ, "default_path", json_string(currentpath.c_str()));
+			json_object_set_new(rootJ, "default_column", json_integer(colnum));
+			return rootJ;
+		} else {
+			return json_object();
+		}
 	}
 	
 	void dataFromJson(json_t* rootJ) override {
@@ -108,7 +112,6 @@ struct LoudNumbers : Module
 			processCSV(currentpath);
 			csvloaded = true;
 		}
-		
 	}
 
 	// Trigger for incoming gate detection
