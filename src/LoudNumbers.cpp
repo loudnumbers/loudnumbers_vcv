@@ -2,6 +2,8 @@
 #include <vector>
 #include <algorithm>
 #include <iterator>
+#include <atomic>
+#include <memory>
 #include <math.h>
 #include <osdialog.h>
 #define HAS_CODECVT
@@ -15,7 +17,58 @@ int defaultdatalength = static_cast<int>(defaultdata.size());
 // This function scales a number from one range to another
 float scalemap(float x, float inmin, float inmax, float outmin, float outmax)
 {
+	// Data with no range (every value identical, or a single datapoint)
+	// can't be mapped; treat a flat line as baseline and return the bottom
+	// of the output range rather than dividing by zero.
+	if (inmax == inmin)
+	{
+		return outmin;
+	}
 	return outmin + (outmax - outmin) * ((x - inmin) / (inmax - inmin));
+};
+
+// A complete snapshot of a loaded dataset: the numbers plus everything
+// calculated from them. Snapshots are never modified after being built —
+// loading new data builds a whole new snapshot and swaps it in. That swap
+// is what keeps the audio thread safe while the UI loads a CSV (issue #4):
+// the audio thread keeps using the snapshot it grabbed at the start of the
+// current process() call, even if the UI publishes a new one meanwhile.
+struct Dataset
+{
+	std::vector<std::string> columns;
+	// For each column: does it contain at least one numeric value?
+	// Columns that don't can't be selected for sonification.
+	std::vector<bool> colhasdata;
+	std::vector<float> data;
+	float datamin = 0.f;
+	float datamax = 0.f;
+
+	int length() const { return static_cast<int>(data.size()); }
+
+	// Calculate min and max, ignoring NaN (missing) values
+	void calcMinMax()
+	{
+		datamin = 0.f;
+		datamax = 0.f;
+		bool first = true;
+		for (float v : data)
+		{
+			if (std::isnan(v))
+			{
+				continue;
+			}
+			if (first)
+			{
+				datamin = datamax = v;
+				first = false;
+			}
+			else
+			{
+				datamin = std::min(datamin, v);
+				datamax = std::max(datamax, v);
+			}
+		}
+	}
 };
 
 struct LoudNumbers : Module
@@ -60,23 +113,42 @@ struct LoudNumbers : Module
 		configOutput(ZEROTOTEN_OUTPUT, "0 to 10V");
 		configOutput(VOCT_OUTPUT, "Volts per octave");
 		configOutput(GATE_OUTPUT, "Gate");
+
+		// Start with the default dataset so the module works out of the box
+		auto ds = std::make_shared<Dataset>();
+		ds->columns = {"Temps 1956-2019"};
+		ds->colhasdata = {true};
+		ds->data = defaultdata;
+		ds->calcMinMax();
+		dataset = ds;
+	}
+
+	// The current dataset. Only access it through getDataset()/setDataset(),
+	// which make the handover between the UI and audio threads safe.
+	std::shared_ptr<const Dataset> dataset;
+
+	std::shared_ptr<const Dataset> getDataset()
+	{
+		return std::atomic_load(&dataset);
+	}
+
+	void setDataset(std::shared_ptr<const Dataset> ds)
+	{
+		std::atomic_store(&dataset, std::move(ds));
 	}
 
 	// Data variables
 	std::string currentpath = "none";
-	std::vector<std::string> columns{"Temps 1956-2019"};
-	std::vector<float> data{-0.267,-0.007,0.046,0.017,-0.049,0.038,0.014,0.048,-0.223,-0.14,-0.068,-0.074,-0.113,0.032,-0.027,-0.186,-0.065,0.062,-0.214,-0.149,-0.241,0.047,-0.062,0.057,0.092,0.14,0.011,0.194,-0.014,-0.03,0.045,0.192,0.198,0.118,0.296,0.254,0.105,0.148,0.208,0.325,0.183,0.39,0.539,0.306,0.294,0.441,0.496,0.505,0.447,0.545,0.506,0.491,0.395,0.506,0.56,0.425,0.47,0.514,0.579,0.763,0.797,0.677,0.597,0.736};
-
-	// Calculate minmax from the stripped vector	
-	float datamin = *std::min_element(data.begin(), data.end());
-	float datamax = *std::max_element(data.begin(), data.end());
-
-	int row = -1; // because the first thing we do is increment it
-	int datalength = static_cast<int>(data.size());
-	int columnslength = static_cast<int>(columns.size());
-	int colnum = 0;
+	int colnum = 0; // -1 means no column is selected (see COLUMN_NONE)
+	std::string savedcolname; // column name restored from a saved patch
 	bool csvloaded = false;
-	bool badcsv = false;
+
+	// Values for colnum / the column request passed to processCSV()
+	static const int COLUMN_NONE = -1;	  // nothing selected: prompt the user
+	static const int COLUMN_AUTO = -2;	  // pick the first numeric column (new file)
+	static const int COLUMN_RESTORE = -3; // restore a saved patch's column by name
+	std::atomic<bool> badcsv{false};
+	std::atomic<int> row{-1}; // because the first thing we do is increment it
 
 	// Style variables
 	std::string main = "#003380";
@@ -84,7 +156,6 @@ struct LoudNumbers : Module
 	std::string white = "#FFFBE4";
 
 	// Variables to track what's happening
-	bool firstrun = true;
 	bool rowadvanced = false;
 
 	// Save and retrieve menu choice(s).
@@ -93,23 +164,34 @@ struct LoudNumbers : Module
 			json_t* rootJ = json_object();
 			json_object_set_new(rootJ, "default_path", json_string(currentpath.c_str()));
 			json_object_set_new(rootJ, "default_column", json_integer(colnum));
+			// Also save the column NAME, so that if the file changes on
+			// disk we can tell whether the saved column still exists
+			// instead of silently playing a different one.
+			std::shared_ptr<const Dataset> ds = getDataset();
+			if (colnum >= 0 && colnum < (int)ds->columns.size()) {
+				json_object_set_new(rootJ, "default_column_name", json_string(ds->columns[colnum].c_str()));
+			}
 			return rootJ;
 		} else {
 			return json_object();
 		}
 	}
-	
+
 	void dataFromJson(json_t* rootJ) override {
 		json_t* default_colJ = json_object_get(rootJ, "default_column");
+		json_t* default_colnameJ = json_object_get(rootJ, "default_column_name");
 		json_t* default_pathJ = json_object_get(rootJ, "default_path");
 		if (default_colJ) {
 			colnum = json_integer_value(default_colJ);
+		}
+		if (default_colnameJ) {
+			savedcolname = json_string_value(default_colnameJ);
 		}
 		if (default_pathJ) {
 			std::string p = json_string_value(default_pathJ);
 			INFO("LOADING PATH: %s", p.c_str());
 			currentpath = p;
-			processCSV(currentpath);
+			processCSV(currentpath, COLUMN_RESTORE);
 			csvloaded = true;
 		}
 	}
@@ -122,46 +204,63 @@ struct LoudNumbers : Module
 
 	// On a loop
 	void process(const ProcessArgs &args) override
-	{	
+	{
 		// As long as it's not a bad CSV
-		if (!badcsv) {
+		if (badcsv)
+		{
+			return;
+		}
 
-			// Log some info about the data on first run.
-			if (firstrun)
+		// Grab the current dataset. If the UI swaps in a new one mid-call,
+		// this call keeps working with the one it started with.
+		std::shared_ptr<const Dataset> ds = getDataset();
+		int len = ds->length();
+
+		// If a gate is high in the trigger input, advance the row and set rowadvanced flag
+		if (ingate.process(inputs[TRIG_INPUT].getVoltage()))
+		{
+			// Increment the row number
+			row++;
+
+			// Check if row has hit max and trigger an end pulse if so.
+			// (No data loaded means no end to reach, so no pulse.)
+			if (len > 0 && row >= len)
 			{
-				INFO("data min: %f", datamin);
-				INFO("data max: %f", datamax);
-				INFO("data length: %i", datalength);
-				firstrun = false;
-			}
-			
-			// If a gate is high in the trigger input, advance the row and set rowadvanced flag
-			if (ingate.process(inputs[TRIG_INPUT].getVoltage()))
-			{	
-				// Increment the row number
-				row++;
-
-				// Check if row has hit max and trigger an end pulse if so
-				if (row >= datalength)
-				{
-					endPulse.trigger(0.01);
-				}
-				
-				// Get ready to play a note
-				rowadvanced = true;
+				endPulse.trigger(0.01);
 			}
 
-			// Activate end pulse if triggered
-			bool epulse = endPulse.process(1.0 / args.sampleRate);
-			outputs[END_OUTPUT].setVoltage(epulse ? 10.0 : 0.0);
+			// Get ready to play a note
+			rowadvanced = true;
+		}
 
-			// If a reset gate is received, set reset flag
-			if (resetgate.process(inputs[RESET_INPUT].getVoltage()))
+		// Activate end pulse if triggered
+		bool epulse = endPulse.process(1.0 / args.sampleRate);
+		outputs[END_OUTPUT].setVoltage(epulse ? 10.0 : 0.0);
+
+		// If a reset gate is received, return to the first datapoint
+		if (resetgate.process(inputs[RESET_INPUT].getVoltage()))
+		{
+			row = 0;
+			rowadvanced = true;
+
+			// If the first datapoint is missing, reset the outputs to 0.
+			// (Otherwise the rowadvanced block below plays it.)
+			if (len == 0 || std::isnan(ds->data[0]))
 			{
-				row = 0;
-				rowadvanced = true;
+				outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(0.f);
+				outputs[ZEROTOTEN_OUTPUT].setVoltage(0.f);
+				outputs[VOCT_OUTPUT].setVoltage(0.f);
+			}
+		}
 
-				// Calculate v/oct min and max
+		// If rowadvanced flag is set
+		if (rowadvanced)
+		{
+			int r = row;
+			if (r >= 0 && r < len) {
+				rowadvanced = false;
+
+				// Get v/oct min and max
 				float voctmin;
 				float voctmax;
 
@@ -176,55 +275,20 @@ struct LoudNumbers : Module
 					voctmax = 4;
 				}
 
-				// Reset the outputs to the first datapoint if it's a number
-				if (!std::isnan(data[0])) {
-					outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(data[0], datamin, datamax, -5.f, 5.f));
-					outputs[ZEROTOTEN_OUTPUT].setVoltage(scalemap(data[0], datamin, datamax, 0.f, 10.f));
-					outputs[VOCT_OUTPUT].setVoltage(scalemap(data[0], datamin, datamax, voctmin, voctmax));
-				} else { // If not, reset to 0.
-					outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(0.f);
-					outputs[ZEROTOTEN_OUTPUT].setVoltage(0.f);
-					outputs[VOCT_OUTPUT].setVoltage(0.f);
-				}
-			} 
-
-			// If rowadvanced flag is set
-			if (rowadvanced) 
-			{
-				if (row < datalength) {
-					rowadvanced = false;
-
-					// Get v/oct min and max
-					float voctmin;
-					float voctmax;
-
-					if (params[RANGE_PARAM].getValue() < 4)
-					{
-						voctmin = 0;
-						voctmax = params[RANGE_PARAM].getValue();
-					}
-					else
-					{
-						voctmin = 4 - params[RANGE_PARAM].getValue();
-						voctmax = 4;
-					}
-
-					// If it's not a NaN value and it's within the range of the data
-					if (!std::isnan(data[row]) || row >= datalength) {
-						// Set the voltages to the data
-						outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, -5.f, 5.f));
-						outputs[ZEROTOTEN_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, 0.f, 10.f));
-						outputs[VOCT_OUTPUT].setVoltage(scalemap(data[row], datamin, datamax, voctmin, voctmax));
-						gatePulse.trigger(params[LENGTH_PARAM].getValue());
-					}
+				// If it's not a NaN (missing) value
+				if (!std::isnan(ds->data[r])) {
+					// Set the voltages to the data
+					outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(ds->data[r], ds->datamin, ds->datamax, -5.f, 5.f));
+					outputs[ZEROTOTEN_OUTPUT].setVoltage(scalemap(ds->data[r], ds->datamin, ds->datamax, 0.f, 10.f));
+					outputs[VOCT_OUTPUT].setVoltage(scalemap(ds->data[r], ds->datamin, ds->datamax, voctmin, voctmax));
+					gatePulse.trigger(params[LENGTH_PARAM].getValue());
 				}
 			}
-
-			// Activate gate pulse if triggered
-			bool gpulse = gatePulse.process(1.0 / args.sampleRate);
-			outputs[GATE_OUTPUT].setVoltage(gpulse ? 10.0 : 0.0);
-
 		}
+
+		// Activate gate pulse if triggered
+		bool gpulse = gatePulse.process(1.0 / args.sampleRate);
+		outputs[GATE_OUTPUT].setVoltage(gpulse ? 10.0 : 0.0);
 	};
 
 	// Function to load a CSV file
@@ -247,48 +311,146 @@ struct LoudNumbers : Module
 		std::string path = pathC;
 		std::free(pathC);
 
-		// Reset column number to 0
-		colnum = 0;
-
-		// Then do what you want with the path.
-		processCSV(path);
+		// Load it, auto-selecting the first numeric column
+		processCSV(path, COLUMN_AUTO);
 		csvloaded = true;
 	}
 
-	// Do some stuff with the CSV
-	void processCSV(std::string path)
+	// Load a CSV file and select a column to sonify. 'request' is either a
+	// column index (from the menu) or one of the COLUMN_ constants above.
+	void processCSV(std::string path, int request)
 	{
-		INFO("Processing CSV");
-		
+		INFO("Processing CSV: %s", path.c_str());
+
 		try {
 			// Setting values that aren't numbers to NaN (rather than throwing error)
-			rapidcsv::Document doc(path, 
+			rapidcsv::Document doc(path,
 								rapidcsv::LabelParams(),
 							rapidcsv::SeparatorParams(),
 							rapidcsv::ConverterParams(true /* pHasDefaultConverter */,
 														NAN /* pDefaultFloat */,
-														NAN /* pDefaultInteger */));
-			columns = doc.GetColumnNames();
-			data = doc.GetColumn<float>(columns[colnum]);
+														0 /* pDefaultInteger */));
 
-			// Copy data to a new minmax vector
-			std::vector<float> minmax_data(data);
+			// Build the new dataset off to the side; nothing the audio
+			// thread can see changes until setDataset() below.
+			auto ds = std::make_shared<Dataset>();
+			ds->columns = doc.GetColumnNames();
 
-			// Strip NaN values from it
-			minmax_data.erase(std::remove_if(std::begin(minmax_data), std::end(minmax_data),[](const float& value) { return std::isnan(value); }),std::end(minmax_data));
-
-			// Calculate minmax from the stripped vector	
-			datamin = *std::min_element(minmax_data.begin(), minmax_data.end());
-			datamax = *std::max_element(minmax_data.begin(), minmax_data.end());
-
-			firstrun = true;
-			row = -1; // because the first thing we do is increment it
-			datalength = static_cast<int>(data.size());
-			columnslength = static_cast<int>(columns.size());
-			if (currentpath != path) {
-				colnum = 0;
-				currentpath = path;
+			// Files that aren't really CSVs (PDFs, executables) sometimes
+			// "parse" into garbage instead of throwing. No columns, or
+			// control characters in the header, means unusable data.
+			if (ds->columns.empty())
+			{
+				throw std::runtime_error("no columns found");
 			}
+			for (const std::string &name : ds->columns)
+			{
+				for (char c : name)
+				{
+					if ((unsigned char)c < 0x20 && c != '\t')
+					{
+						throw std::runtime_error("header is not text");
+					}
+				}
+			}
+
+			// Work out which columns contain at least one number; only
+			// those can be sonified, so only those are selectable.
+			int ncols = (int)ds->columns.size();
+			ds->colhasdata.assign(ncols, false);
+			for (int i = 0; i < ncols; i++)
+			{
+				try
+				{
+					std::vector<float> values = doc.GetColumn<float>(ds->columns[i]);
+					for (float v : values)
+					{
+						if (!std::isnan(v))
+						{
+							ds->colhasdata[i] = true;
+							break;
+						}
+					}
+				}
+				catch (...)
+				{
+					// A column that can't even be read has no data
+					ds->colhasdata[i] = false;
+				}
+			}
+
+			// Decide which column to select
+			int col = COLUMN_NONE;
+			if (request >= 0)
+			{
+				// Direct choice from the menu (only numeric columns are
+				// clickable, but double-check to be safe)
+				if (request < ncols && ds->colhasdata[request])
+				{
+					col = request;
+				}
+			}
+			else if (request == COLUMN_AUTO)
+			{
+				// New file: pick the first column that has numbers in it.
+				// A file with no numeric columns at all can't be sonified,
+				// so it's treated as invalid.
+				for (int i = 0; i < ncols; i++)
+				{
+					if (ds->colhasdata[i])
+					{
+						col = i;
+						break;
+					}
+				}
+				if (col == COLUMN_NONE)
+				{
+					throw std::runtime_error("no numeric columns");
+				}
+			}
+			else // COLUMN_RESTORE: a saved patch is being reopened
+			{
+				if (!savedcolname.empty())
+				{
+					// Find the saved column by name. If the file has
+					// changed and it's gone (or lost its numbers), leave
+					// nothing selected: the display prompts the user
+					// rather than guessing a different column.
+					for (int i = 0; i < ncols; i++)
+					{
+						if (ds->columns[i] == savedcolname && ds->colhasdata[i])
+						{
+							col = i;
+							break;
+						}
+					}
+				}
+				else if (colnum >= 0 && colnum < ncols && ds->colhasdata[colnum])
+				{
+					// Patches saved before column names were stored only
+					// have the position; use it if it's still usable.
+					col = colnum;
+				}
+			}
+
+			if (col != COLUMN_NONE)
+			{
+				ds->data = doc.GetColumn<float>(ds->columns[col]);
+				ds->calcMinMax();
+				INFO("data min: %f", ds->datamin);
+				INFO("data max: %f", ds->datamax);
+				INFO("data length: %i", ds->length());
+			}
+			else
+			{
+				INFO("no column selected");
+			}
+
+			// Publish: from here on the audio thread and UI see the new data.
+			colnum = col;
+			currentpath = path;
+			row = -1; // because the first thing we do is increment it
+			setDataset(ds);
 			badcsv = false;
 
 		} catch (...) {
@@ -313,25 +475,40 @@ struct DataViz : Widget
 		// The API states that the module  should only write to layer 1.
 		// And we don't want to run this until 'module' has actually been set.
 		if (layer == 1 && module)
-		{	
+		{
 			if (module->badcsv) {
 				nvgFillColor(args.vg, color::fromHexString(module->white));
 				nvgFontSize(args.vg, 14);
 				nvgTextAlign(args.vg, NVG_ALIGN_CENTER);
 				nvgText(args.vg, width/2, height/2, "Invalid CSV", NULL);
+			} else if (module->colnum < 0) {
+				// A file is loaded but no column is selected (e.g. a saved
+				// patch's column no longer exists in the file)
+				nvgFillColor(args.vg, color::fromHexString(module->white));
+				nvgFontSize(args.vg, 14);
+				nvgTextAlign(args.vg, NVG_ALIGN_CENTER);
+				nvgText(args.vg, width/2, height/2 - 8, "Right-click to select", NULL);
+				nvgText(args.vg, width/2, height/2 + 8, "a column of data", NULL);
 			} else {
+				// Take a snapshot of the dataset for this draw call
+				std::shared_ptr<const Dataset> ds = module->getDataset();
+				int len = ds->length();
+
+				// Avoid dividing by zero when placing a single datapoint
+				float xdivisor = std::max(len - 1, 1);
+
 				// Draw the line
 				nvgBeginPath(args.vg);
 				bool firstpoint = true;
 				nvgMoveTo(args.vg, margin, height);
 
-				for (int d = 0; d < module->datalength; d++)
+				for (int d = 0; d < len; d++)
 				{
-					if (!std::isnan(module->data[d])) {
+					if (!std::isnan(ds->data[d])) {
 						// Calculate x and y coords
-						float x = margin + (d * width / (module->datalength - 1));
+						float x = margin + (d * width / xdivisor);
 						// Y == zero at the TOP of the box.
-						float y = (height - 3) - (scalemap(module->data[d], module->datamin, module->datamax,
+						float y = (height - 3) - (scalemap(ds->data[d], ds->datamin, ds->datamax,
 													0.f, height-6));
 
 						if (firstpoint) {
@@ -341,7 +518,7 @@ struct DataViz : Widget
 							nvgLineTo(args.vg, x, y);
 						}
 					}
-					
+
 				}
 
 				nvgStrokeColor(args.vg, color::fromHexString(module->faded));
@@ -349,23 +526,20 @@ struct DataViz : Widget
 				nvgStroke(args.vg);
 				nvgClosePath(args.vg);
 
-				// Draw the circle
-				for (int d = 0; d < module->datalength; d++)
+				// Draw a circle at the current datapoint
+				int r = module->row;
+				if (r >= 0 && r < len && !std::isnan(ds->data[r]))
 				{
-					if (d == module->row)
-					{
-						// Calculate x and y coords
-						float x = margin + (d * width / (module->datalength - 1));
-						// Y == zero at the TOP of the box.
-						float y = (height - 3) - (scalemap(module->data[d], module->datamin, module->datamax,
-														0.f, height-6));
-						// Draw a circle for each
-						nvgBeginPath(args.vg);
-						nvgCircle(args.vg, x, y, mm2px(circ_size));
-						nvgFillColor(args.vg, color::fromHexString(module->main));
-						nvgFill(args.vg);
-						nvgClosePath(args.vg);
-					}
+					// Calculate x and y coords
+					float x = margin + (r * width / xdivisor);
+					// Y == zero at the TOP of the box.
+					float y = (height - 3) - (scalemap(ds->data[r], ds->datamin, ds->datamax,
+													0.f, height-6));
+					nvgBeginPath(args.vg);
+					nvgCircle(args.vg, x, y, mm2px(circ_size));
+					nvgFillColor(args.vg, color::fromHexString(module->main));
+					nvgFill(args.vg);
+					nvgClosePath(args.vg);
 				}
 
 			}
@@ -388,7 +562,7 @@ struct DataViz : Widget
 					} else {
 						nvgLineTo(args.vg, x, y);
 					}
-					
+
 				}
 
 				nvgStrokeColor(args.vg, color::fromHexString("#805279"));
@@ -432,15 +606,14 @@ struct LoudNumbersWidget : ModuleWidget
 		addChild(data_viz);
 	}
 
-	struct ColumnMenuItem : MenuItem 
+	struct ColumnMenuItem : MenuItem
 	{
 		LoudNumbers *module;
 		int val;
 		void onAction(const event::Action &e) override {
 			if (module->csvloaded)
 			{
-				module->colnum = val;
-				module->processCSV(module->currentpath);
+				module->processCSV(module->currentpath, val);
 			}
 		}
 		void step() override {
@@ -459,19 +632,25 @@ struct LoudNumbersWidget : ModuleWidget
 		// Load CSV
 		menu->addChild(createMenuItem("Load CSV", "",
 									  [=]()
-									  { 
+									  {
 										  module->loadCSV();
 									  }));
 
 		// Spacer
 		menu->addChild(new MenuSeparator());
 
-		for (int i = 0; i < module->columnslength; i++) 
+		// Take a snapshot of the dataset for the column list
+		std::shared_ptr<const Dataset> ds = module->getDataset();
+
+		for (int i = 0; i < (int)ds->columns.size(); i++)
 		{
 			ColumnMenuItem *item = new ColumnMenuItem();
-			item->text = module->columns[i];
+			item->text = ds->columns[i];
 			item->val = i;
 			item->module = module;
+			// Columns with no numeric values can't be sonified, so grey
+			// them out
+			item->disabled = !ds->colhasdata[i];
 			menu->addChild(item);
 		}
 	}
