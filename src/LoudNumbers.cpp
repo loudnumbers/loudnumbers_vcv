@@ -18,11 +18,11 @@ int defaultdatalength = static_cast<int>(defaultdata.size());
 float scalemap(float x, float inmin, float inmax, float outmin, float outmax)
 {
 	// Data with no range (every value identical, or a single datapoint)
-	// can't be mapped; return the middle of the output range rather than
-	// dividing by zero.
+	// can't be mapped; treat a flat line as baseline and return the bottom
+	// of the output range rather than dividing by zero.
 	if (inmax == inmin)
 	{
-		return (outmin + outmax) / 2.f;
+		return outmin;
 	}
 	return outmin + (outmax - outmin) * ((x - inmin) / (inmax - inmin));
 };
@@ -36,6 +36,9 @@ float scalemap(float x, float inmin, float inmax, float outmin, float outmax)
 struct Dataset
 {
 	std::vector<std::string> columns;
+	// For each column: does it contain at least one numeric value?
+	// Columns that don't can't be selected for sonification.
+	std::vector<bool> colhasdata;
 	std::vector<float> data;
 	float datamin = 0.f;
 	float datamax = 0.f;
@@ -114,6 +117,7 @@ struct LoudNumbers : Module
 		// Start with the default dataset so the module works out of the box
 		auto ds = std::make_shared<Dataset>();
 		ds->columns = {"Temps 1956-2019"};
+		ds->colhasdata = {true};
 		ds->data = defaultdata;
 		ds->calcMinMax();
 		dataset = ds;
@@ -135,8 +139,14 @@ struct LoudNumbers : Module
 
 	// Data variables
 	std::string currentpath = "none";
-	int colnum = 0;
+	int colnum = 0; // -1 means no column is selected (see COLUMN_NONE)
+	std::string savedcolname; // column name restored from a saved patch
 	bool csvloaded = false;
+
+	// Values for colnum / the column request passed to processCSV()
+	static const int COLUMN_NONE = -1;	  // nothing selected: prompt the user
+	static const int COLUMN_AUTO = -2;	  // pick the first numeric column (new file)
+	static const int COLUMN_RESTORE = -3; // restore a saved patch's column by name
 	std::atomic<bool> badcsv{false};
 	std::atomic<int> row{-1}; // because the first thing we do is increment it
 
@@ -154,6 +164,13 @@ struct LoudNumbers : Module
 			json_t* rootJ = json_object();
 			json_object_set_new(rootJ, "default_path", json_string(currentpath.c_str()));
 			json_object_set_new(rootJ, "default_column", json_integer(colnum));
+			// Also save the column NAME, so that if the file changes on
+			// disk we can tell whether the saved column still exists
+			// instead of silently playing a different one.
+			std::shared_ptr<const Dataset> ds = getDataset();
+			if (colnum >= 0 && colnum < (int)ds->columns.size()) {
+				json_object_set_new(rootJ, "default_column_name", json_string(ds->columns[colnum].c_str()));
+			}
 			return rootJ;
 		} else {
 			return json_object();
@@ -162,15 +179,19 @@ struct LoudNumbers : Module
 
 	void dataFromJson(json_t* rootJ) override {
 		json_t* default_colJ = json_object_get(rootJ, "default_column");
+		json_t* default_colnameJ = json_object_get(rootJ, "default_column_name");
 		json_t* default_pathJ = json_object_get(rootJ, "default_path");
 		if (default_colJ) {
 			colnum = json_integer_value(default_colJ);
+		}
+		if (default_colnameJ) {
+			savedcolname = json_string_value(default_colnameJ);
 		}
 		if (default_pathJ) {
 			std::string p = json_string_value(default_pathJ);
 			INFO("LOADING PATH: %s", p.c_str());
 			currentpath = p;
-			processCSV(currentpath);
+			processCSV(currentpath, COLUMN_RESTORE);
 			csvloaded = true;
 		}
 	}
@@ -201,8 +222,9 @@ struct LoudNumbers : Module
 			// Increment the row number
 			row++;
 
-			// Check if row has hit max and trigger an end pulse if so
-			if (row >= len)
+			// Check if row has hit max and trigger an end pulse if so.
+			// (No data loaded means no end to reach, so no pulse.)
+			if (len > 0 && row >= len)
 			{
 				endPulse.trigger(0.01);
 			}
@@ -289,16 +311,14 @@ struct LoudNumbers : Module
 		std::string path = pathC;
 		std::free(pathC);
 
-		// Reset column number to 0
-		colnum = 0;
-
-		// Then do what you want with the path.
-		processCSV(path);
+		// Load it, auto-selecting the first numeric column
+		processCSV(path, COLUMN_AUTO);
 		csvloaded = true;
 	}
 
-	// Do some stuff with the CSV
-	void processCSV(std::string path)
+	// Load a CSV file and select a column to sonify. 'request' is either a
+	// column index (from the menu) or one of the COLUMN_ constants above.
+	void processCSV(std::string path, int request)
 	{
 		INFO("Processing CSV: %s", path.c_str());
 
@@ -334,22 +354,97 @@ struct LoudNumbers : Module
 				}
 			}
 
-			// A new file starts at the first column; reloading the same
-			// file keeps the current selection. Either way, make sure the
-			// column actually exists (a saved patch may reference a column
-			// that's no longer in the file).
-			int col = (path != currentpath) ? 0 : colnum;
-			if (col < 0 || col >= (int)ds->columns.size())
+			// Work out which columns contain at least one number; only
+			// those can be sonified, so only those are selectable.
+			int ncols = (int)ds->columns.size();
+			ds->colhasdata.assign(ncols, false);
+			for (int i = 0; i < ncols; i++)
 			{
-				col = 0;
+				try
+				{
+					std::vector<float> values = doc.GetColumn<float>(ds->columns[i]);
+					for (float v : values)
+					{
+						if (!std::isnan(v))
+						{
+							ds->colhasdata[i] = true;
+							break;
+						}
+					}
+				}
+				catch (...)
+				{
+					// A column that can't even be read has no data
+					ds->colhasdata[i] = false;
+				}
 			}
 
-			ds->data = doc.GetColumn<float>(ds->columns[col]);
-			ds->calcMinMax();
+			// Decide which column to select
+			int col = COLUMN_NONE;
+			if (request >= 0)
+			{
+				// Direct choice from the menu (only numeric columns are
+				// clickable, but double-check to be safe)
+				if (request < ncols && ds->colhasdata[request])
+				{
+					col = request;
+				}
+			}
+			else if (request == COLUMN_AUTO)
+			{
+				// New file: pick the first column that has numbers in it.
+				// A file with no numeric columns at all can't be sonified,
+				// so it's treated as invalid.
+				for (int i = 0; i < ncols; i++)
+				{
+					if (ds->colhasdata[i])
+					{
+						col = i;
+						break;
+					}
+				}
+				if (col == COLUMN_NONE)
+				{
+					throw std::runtime_error("no numeric columns");
+				}
+			}
+			else // COLUMN_RESTORE: a saved patch is being reopened
+			{
+				if (!savedcolname.empty())
+				{
+					// Find the saved column by name. If the file has
+					// changed and it's gone (or lost its numbers), leave
+					// nothing selected: the display prompts the user
+					// rather than guessing a different column.
+					for (int i = 0; i < ncols; i++)
+					{
+						if (ds->columns[i] == savedcolname && ds->colhasdata[i])
+						{
+							col = i;
+							break;
+						}
+					}
+				}
+				else if (colnum >= 0 && colnum < ncols && ds->colhasdata[colnum])
+				{
+					// Patches saved before column names were stored only
+					// have the position; use it if it's still usable.
+					col = colnum;
+				}
+			}
 
-			INFO("data min: %f", ds->datamin);
-			INFO("data max: %f", ds->datamax);
-			INFO("data length: %i", ds->length());
+			if (col != COLUMN_NONE)
+			{
+				ds->data = doc.GetColumn<float>(ds->columns[col]);
+				ds->calcMinMax();
+				INFO("data min: %f", ds->datamin);
+				INFO("data max: %f", ds->datamax);
+				INFO("data length: %i", ds->length());
+			}
+			else
+			{
+				INFO("no column selected");
+			}
 
 			// Publish: from here on the audio thread and UI see the new data.
 			colnum = col;
@@ -386,6 +481,14 @@ struct DataViz : Widget
 				nvgFontSize(args.vg, 14);
 				nvgTextAlign(args.vg, NVG_ALIGN_CENTER);
 				nvgText(args.vg, width/2, height/2, "Invalid CSV", NULL);
+			} else if (module->colnum < 0) {
+				// A file is loaded but no column is selected (e.g. a saved
+				// patch's column no longer exists in the file)
+				nvgFillColor(args.vg, color::fromHexString(module->white));
+				nvgFontSize(args.vg, 14);
+				nvgTextAlign(args.vg, NVG_ALIGN_CENTER);
+				nvgText(args.vg, width/2, height/2 - 8, "Right-click to select", NULL);
+				nvgText(args.vg, width/2, height/2 + 8, "a column of data", NULL);
 			} else {
 				// Take a snapshot of the dataset for this draw call
 				std::shared_ptr<const Dataset> ds = module->getDataset();
@@ -510,8 +613,7 @@ struct LoudNumbersWidget : ModuleWidget
 		void onAction(const event::Action &e) override {
 			if (module->csvloaded)
 			{
-				module->colnum = val;
-				module->processCSV(module->currentpath);
+				module->processCSV(module->currentpath, val);
 			}
 		}
 		void step() override {
@@ -546,6 +648,9 @@ struct LoudNumbersWidget : ModuleWidget
 			item->text = ds->columns[i];
 			item->val = i;
 			item->module = module;
+			// Columns with no numeric values can't be sonified, so grey
+			// them out
+			item->disabled = !ds->colhasdata[i];
 			menu->addChild(item);
 		}
 	}
