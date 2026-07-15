@@ -53,7 +53,13 @@ it) and restart Rack.
   clock, no quantizer, no sound generation. Musicality comes from the patch
   (external clock into TRIG, quantizer after V/OCT). Stay modular-idiomatic.
 - Missing/non-numeric CSV cells become NaN: excluded from min/max, produce no
-  gate (missing data is audible as silence).
+  gate (missing data is audible as silence). In the display, a gap breaks
+  the line with a notch: the line reaches ¾ of a step past the valid
+  points on either side, so an isolated valid point still shows as a
+  short fragment. Notches under a pixel wide (dense data, short gaps)
+  are drawn straight through; long gaps stay visible at any density.
+  Missing points before the first / after the last valid point draw
+  nothing.
 - V/oct RANGE mapping is intentionally asymmetric: ranges 1-3 octaves span
   0V..+range; 4-8 pin the top at +4V and grow downward.
 - Looping is done by the user patching END → RESET, not built in. RESET
