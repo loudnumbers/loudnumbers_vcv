@@ -12,7 +12,7 @@ Right-click to load a CSV file, and then right-click again to select a column of
 
 Your CSV file must have a single header row containing column names, and you'll only be able to sonify columns containing numbers. Any missing or non-numeric values in your data will be replaced with null values that don't fire a gate.
 
-Send a trigger signal into the TRIG input to process the first datapoint and move to the next one. Send a trigger into the RESET input to return to the start of the dataset.
+Send a trigger signal into the TRIG input to process the first datapoint and move to the next one. Send a trigger into the RESET input to return to the start of the dataset — nothing plays until the next trigger arrives at TRIG, which plays the first datapoint in time with your clock. The END output fires a trigger as the last datapoint plays, so patching END → RESET loops the dataset seamlessly.
 
 The top two outputs generate voltages from -5V to 5V and 0 to 10V respectively. The lower left output generates 1V/Oct pitch CV, scaled to the number of octaves selected using the RANGE knob. The lower right output generates a gate as each new datapoint is processed - change the lenth of this gate with the LENGTH knob.
 
@@ -28,7 +28,7 @@ A: Use [CSVLint](https://csvlint.io/) to check if your CSV is valid. If it is, s
 
 **Q: I'm getting crashes when loading a CSV file**
 
-This is likely a text encoding issue with the CSV library, which I'm [working on a solution for](https://github.com/loudnumbers/loudnumbers_vcv/issues/4). In the meantime, try re-encoding your csv file to UTF-8, which should fix it.
+A: This should be fixed in recent versions. If you're still seeing a crash, please submit an issue and attach the CSV file you're trying to load. Re-encoding your csv file to UTF-8 may help in the meantime.
 
 **Q: How do I make the output sound more musical?**
 

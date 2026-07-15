@@ -33,6 +33,13 @@ lin-x64, mac-x64, and mac-arm64 on every push and uploads `.vcvplugin`
 artifacts; a `v*` tag that matches the `plugin.json` version creates a
 GitHub release.
 
+After every push that triggers a CI build, without being asked, give the
+owner: (1) a link to the workflow run so they can download the
+**mac-arm64** artifact from its Artifacts section, and (2) the install
+path — drop the `.vcvplugin` into
+`~/Library/Application Support/Rack2/plugins-mac-arm64` (don't extract
+it) and restart Rack.
+
 ## Releasing to the VCV Library
 
 1. Bump `version` in `plugin.json` (Rack 2 versions look like `2.x.y`).
@@ -49,7 +56,27 @@ GitHub release.
   gate (missing data is audible as silence).
 - V/oct RANGE mapping is intentionally asymmetric: ranges 1-3 octaves span
   0V..+range; 4-8 pin the top at +4V and grow downward.
-- Looping is done by the user patching END → RESET, not built in.
+- Looping is done by the user patching END → RESET, not built in. RESET
+  arms rather than plays: it returns the playhead to datapoint 0 with no
+  gate, holding the CV outputs, and the next TRIG plays datapoint 0 in
+  time with the clock. END fires as the last datapoint plays
+  (end-of-cycle), so an END → RESET loop is gapless (N datapoints = N
+  clock ticks) and resets are always in time. The display playhead
+  tracks what's sounding, not the armed position: a filled circle marks
+  the last-played datapoint, and a hollow circle on datapoint 0 means
+  the sequence is cued but hasn't begun (fresh data, or a manual
+  reset). A reset arriving while END is still high counts as an
+  END → RESET loop reset instead: the filled circle stays on the last
+  datapoint while it plays out. The circle disappears if the playhead
+  runs past the end without a reset.
+  Known edge cases of the "END still high" test (owner-approved,
+  display-only — the sequencing is identical either way): a manual
+  reset landing inside END's 10ms pulse reads as a loop reset, so no
+  hollow circle appears; an END → RESET connection routed through
+  modules that delay the trigger by more than 10ms reads as manual, so
+  the hollow circle flashes at each loop point. And since a missing
+  (NaN) datapoint 0 has no vertical position, no cue circle is drawn
+  while cued on it.
 - Columns with no numeric values can't be selected (greyed out in the
   menu); a file with no numeric columns at all is an invalid CSV.
 - Flat data (all values identical, incl. single-row files) maps to the
@@ -61,8 +88,10 @@ GitHub release.
 ## Known constraints
 
 - `process()` runs on the audio thread; `processCSV()` and the DataViz widget
-  run on UI-side threads. They currently share mutable state (`data`,
-  `datamin`, `datamax`, `datalength`, `row`) without synchronization — the
-  suspected cause of the crashes in issue #4. Don't add more unsynchronized
-  shared state; the planned fix is to publish an immutable dataset snapshot.
+  run on UI-side threads. Loaded data crosses that boundary only as an
+  immutable `Dataset` snapshot published via `getDataset()`/`setDataset()`;
+  the remaining shared scalars (`row`, `playingrow`, `cued`, `badcsv`,
+  `resetarmed`) are atomics.
+  Don't add unsynchronized shared state — extend the snapshot, or use an
+  atomic, instead.
 - The owner develops on macOS only; Windows/Linux verification happens via CI.
