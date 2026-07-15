@@ -150,13 +150,16 @@ struct LoudNumbers : Module
 	std::atomic<bool> badcsv{false};
 	std::atomic<int> row{-1}; // because the first thing we do is increment it
 
+	// Set when a reset has moved the playhead back to the first datapoint
+	// but it hasn't played yet: the next TRIG should play datapoint 0
+	// instead of stepping past it. Atomic because processCSV() (UI thread)
+	// clears it while process() (audio thread) reads it.
+	std::atomic<bool> resetarmed{false};
+
 	// Style variables
 	std::string main = "#003380";
 	std::string faded = "#805279";
 	std::string white = "#FFFBE4";
-
-	// Variables to track what's happening
-	bool rowadvanced = false;
 
 	// Save and retrieve menu choice(s).
 	json_t* dataToJson() override {
@@ -202,6 +205,32 @@ struct LoudNumbers : Module
 	dsp::PulseGenerator gatePulse;
 	dsp::PulseGenerator endPulse;
 
+	// Set the three CV outputs to datapoint r of the dataset. The caller
+	// checks that r is in range and not a NaN (missing) value.
+	void setCVOutputs(const Dataset &ds, int r)
+	{
+		// Get v/oct min and max: ranges of 1-3 octaves span 0V up to
+		// +range; from 4 octaves the top pins at +4V and grows downward.
+		float voctmin;
+		float voctmax;
+
+		if (params[RANGE_PARAM].getValue() < 4)
+		{
+			voctmin = 0;
+			voctmax = params[RANGE_PARAM].getValue();
+		}
+		else
+		{
+			voctmin = 4 - params[RANGE_PARAM].getValue();
+			voctmax = 4;
+		}
+
+		// Set the voltages to the data
+		outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(ds.data[r], ds.datamin, ds.datamax, -5.f, 5.f));
+		outputs[ZEROTOTEN_OUTPUT].setVoltage(scalemap(ds.data[r], ds.datamin, ds.datamax, 0.f, 10.f));
+		outputs[VOCT_OUTPUT].setVoltage(scalemap(ds.data[r], ds.datamin, ds.datamax, voctmin, voctmax));
+	}
+
 	// On a loop
 	void process(const ProcessArgs &args) override
 	{
@@ -216,77 +245,58 @@ struct LoudNumbers : Module
 		std::shared_ptr<const Dataset> ds = getDataset();
 		int len = ds->length();
 
-		// If a gate is high in the trigger input, advance the row and set rowadvanced flag
-		if (ingate.process(inputs[TRIG_INPUT].getVoltage()))
-		{
-			// Increment the row number
-			row++;
-
-			// Check if row has hit max and trigger an end pulse if so.
-			// (No data loaded means no end to reach, so no pulse.)
-			if (len > 0 && row >= len)
-			{
-				endPulse.trigger(0.01);
-			}
-
-			// Get ready to play a note
-			rowadvanced = true;
-		}
-
-		// Activate end pulse if triggered
-		bool epulse = endPulse.process(1.0 / args.sampleRate);
-		outputs[END_OUTPUT].setVoltage(epulse ? 10.0 : 0.0);
-
-		// If a reset gate is received, return to the first datapoint
+		// A trigger at RESET arms the sequence: the playhead returns to
+		// the first datapoint, but no gate fires and the CV outputs hold
+		// their last values. The next TRIG then plays datapoint 0 in time
+		// with the clock. With END -> RESET patched, the reset arms while
+		// the last note is still sounding, so the loop stays gapless
+		// (N datapoints = N clock ticks).
 		if (resetgate.process(inputs[RESET_INPUT].getVoltage()))
 		{
 			row = 0;
-			rowadvanced = true;
-
-			// If the first datapoint is missing, reset the outputs to 0.
-			// (Otherwise the rowadvanced block below plays it.)
-			if (len == 0 || std::isnan(ds->data[0]))
-			{
-				outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(0.f);
-				outputs[ZEROTOTEN_OUTPUT].setVoltage(0.f);
-				outputs[VOCT_OUTPUT].setVoltage(0.f);
-			}
+			resetarmed = true;
 		}
 
-		// If rowadvanced flag is set
-		if (rowadvanced)
+		// If a gate is high in the trigger input, play the next datapoint
+		if (ingate.process(inputs[TRIG_INPUT].getVoltage()))
 		{
+			if (resetarmed)
+			{
+				// A reset already moved the playhead to the first
+				// datapoint; play that rather than stepping past it.
+				resetarmed = false;
+			}
+			else
+			{
+				// Increment the row number
+				row++;
+			}
+
 			int r = row;
-			if (r >= 0 && r < len) {
-				rowadvanced = false;
-
-				// Get v/oct min and max
-				float voctmin;
-				float voctmax;
-
-				if (params[RANGE_PARAM].getValue() < 4)
+			if (r >= 0 && r < len)
+			{
+				// If it's not a NaN (missing) value, play it. Missing
+				// data fires no gate and the CV outputs hold, so it's
+				// audible as silence.
+				if (!std::isnan(ds->data[r]))
 				{
-					voctmin = 0;
-					voctmax = params[RANGE_PARAM].getValue();
-				}
-				else
-				{
-					voctmin = 4 - params[RANGE_PARAM].getValue();
-					voctmax = 4;
-				}
-
-				// If it's not a NaN (missing) value
-				if (!std::isnan(ds->data[r])) {
-					// Set the voltages to the data
-					outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(ds->data[r], ds->datamin, ds->datamax, -5.f, 5.f));
-					outputs[ZEROTOTEN_OUTPUT].setVoltage(scalemap(ds->data[r], ds->datamin, ds->datamax, 0.f, 10.f));
-					outputs[VOCT_OUTPUT].setVoltage(scalemap(ds->data[r], ds->datamin, ds->datamax, voctmin, voctmax));
+					setCVOutputs(*ds, r);
 					gatePulse.trigger(params[LENGTH_PARAM].getValue());
 				}
+
+				// END fires as the last datapoint plays (end of cycle),
+				// so END -> RESET re-arms the sequence in time for the
+				// next clock tick to play datapoint 0.
+				if (r == len - 1)
+				{
+					endPulse.trigger(0.01);
+				}
 			}
 		}
 
-		// Activate gate pulse if triggered
+		// Activate end and gate pulses if triggered
+		bool epulse = endPulse.process(1.0 / args.sampleRate);
+		outputs[END_OUTPUT].setVoltage(epulse ? 10.0 : 0.0);
 		bool gpulse = gatePulse.process(1.0 / args.sampleRate);
 		outputs[GATE_OUTPUT].setVoltage(gpulse ? 10.0 : 0.0);
 	};
@@ -450,6 +460,7 @@ struct LoudNumbers : Module
 			colnum = col;
 			currentpath = path;
 			row = -1; // because the first thing we do is increment it
+			resetarmed = false; // fresh data starts unarmed
 			setDataset(ds);
 			badcsv = false;
 

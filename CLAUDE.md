@@ -49,7 +49,12 @@ GitHub release.
   gate (missing data is audible as silence).
 - V/oct RANGE mapping is intentionally asymmetric: ranges 1-3 octaves span
   0V..+range; 4-8 pin the top at +4V and grow downward.
-- Looping is done by the user patching END → RESET, not built in.
+- Looping is done by the user patching END → RESET, not built in. RESET
+  arms rather than plays: it returns the playhead to datapoint 0 with no
+  gate, holding the CV outputs, and the next TRIG plays datapoint 0 in
+  time with the clock. END fires as the last datapoint plays
+  (end-of-cycle), so an END → RESET loop is gapless (N datapoints = N
+  clock ticks) and resets are always in time.
 - Columns with no numeric values can't be selected (greyed out in the
   menu); a file with no numeric columns at all is an invalid CSV.
 - Flat data (all values identical, incl. single-row files) maps to the
@@ -61,8 +66,9 @@ GitHub release.
 ## Known constraints
 
 - `process()` runs on the audio thread; `processCSV()` and the DataViz widget
-  run on UI-side threads. They currently share mutable state (`data`,
-  `datamin`, `datamax`, `datalength`, `row`) without synchronization — the
-  suspected cause of the crashes in issue #4. Don't add more unsynchronized
-  shared state; the planned fix is to publish an immutable dataset snapshot.
+  run on UI-side threads. Loaded data crosses that boundary only as an
+  immutable `Dataset` snapshot published via `getDataset()`/`setDataset()`;
+  the remaining shared scalars (`row`, `badcsv`, `resetarmed`) are atomics.
+  Don't add unsynchronized shared state — extend the snapshot, or use an
+  atomic, instead.
 - The owner develops on macOS only; Windows/Linux verification happens via CI.
