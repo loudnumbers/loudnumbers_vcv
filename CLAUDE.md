@@ -33,6 +33,13 @@ lin-x64, mac-x64, and mac-arm64 on every push and uploads `.vcvplugin`
 artifacts; a `v*` tag that matches the `plugin.json` version creates a
 GitHub release.
 
+After every push that triggers a CI build, without being asked, give the
+owner: (1) a link to the workflow run so they can download the
+**mac-arm64** artifact from its Artifacts section, and (2) the install
+path — drop the `.vcvplugin` into
+`~/Library/Application Support/Rack2/plugins-mac-arm64` (don't extract
+it) and restart Rack.
+
 ## Releasing to the VCV Library
 
 1. Bump `version` in `plugin.json` (Rack 2 versions look like `2.x.y`).
