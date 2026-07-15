@@ -156,6 +156,15 @@ struct LoudNumbers : Module
 	// clears it while process() (audio thread) reads it.
 	std::atomic<bool> resetarmed{false};
 
+	// The datapoint the display playhead sits on: the one most recently
+	// played. Unlike 'row', which a reset moves at arm time, this only
+	// changes when a TRIG actually plays, so the circle tracks what's
+	// sounding rather than where the playhead is armed. -1 means nothing
+	// is playing (before the first trigger, or after the playhead runs
+	// past the end of the data) and hides the circle. Atomic because the
+	// audio thread writes it and the DataViz widget reads it.
+	std::atomic<int> playingrow{-1};
+
 	// Style variables
 	std::string main = "#003380";
 	std::string faded = "#805279";
@@ -275,6 +284,10 @@ struct LoudNumbers : Module
 			int r = row;
 			if (r >= 0 && r < len)
 			{
+				// This datapoint is now the one sounding, so the display
+				// playhead moves here.
+				playingrow = r;
+
 				// If it's not a NaN (missing) value, play it. Missing
 				// data fires no gate and the CV outputs hold, so it's
 				// audible as silence.
@@ -291,6 +304,12 @@ struct LoudNumbers : Module
 				{
 					endPulse.trigger(0.01);
 				}
+			}
+			else
+			{
+				// The playhead has run past the end (no reset patched):
+				// nothing plays and the display playhead disappears.
+				playingrow = -1;
 			}
 		}
 
@@ -461,6 +480,7 @@ struct LoudNumbers : Module
 			currentpath = path;
 			row = -1; // because the first thing we do is increment it
 			resetarmed = false; // fresh data starts unarmed
+			playingrow = -1; // nothing is sounding until the first trigger
 			setDataset(ds);
 			badcsv = false;
 
@@ -537,8 +557,10 @@ struct DataViz : Widget
 				nvgStroke(args.vg);
 				nvgClosePath(args.vg);
 
-				// Draw a circle at the current datapoint
-				int r = module->row;
+				// Draw a circle at the datapoint that's currently
+				// sounding (not at 'row', which a reset moves before
+				// anything plays)
+				int r = module->playingrow;
 				if (r >= 0 && r < len && !std::isnan(ds->data[r]))
 				{
 					// Calculate x and y coords
