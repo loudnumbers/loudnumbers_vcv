@@ -61,7 +61,16 @@ it) and restart Rack.
   Missing points before the first / after the last valid point draw
   nothing.
 - V/oct RANGE mapping is intentionally asymmetric: ranges 1-3 octaves span
-  0V..+range; 4-8 pin the top at +4V and grow downward.
+  0V..+range; 4-8 pin the top at +4V and grow downward. `voctRange()`
+  implements it and the knob's tooltip (`RangeQuantity`) spells out the
+  exact span, so the behaviour explains itself in the UI.
+- Patches embed the selected column's data (JSON nulls for NaN), capped
+  at 10k values because dataToJson runs on every autosave; bigger
+  datasets stay path-only. On open, the CSV file wins if it's readable
+  (so edits show up); the embedded copy is the fallback, and in that
+  state column switching is locked (`embeddedonly`) until
+  "Reload CSV from disk" succeeds. A reload with the file still missing
+  shows the invalid-CSV state rather than silently keeping stale data.
 - Looping is done by the user patching END → RESET, not built in. RESET
   arms rather than plays: it returns the playhead to datapoint 0 with no
   gate, holding the CV outputs, and the next TRIG plays datapoint 0 in
