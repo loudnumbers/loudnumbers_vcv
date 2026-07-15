@@ -553,28 +553,64 @@ struct DataViz : Widget
 				// Avoid dividing by zero when placing a single datapoint
 				float xdivisor = std::max(len - 1, 1);
 
-				// Draw the line
+				// Draw the line. Consecutive valid datapoints are joined
+				// directly; missing (NaN) datapoints break the line with a
+				// notch (issue #22): on each side of a gap the line reaches
+				// 3/4 of a step past the last valid point, sloping towards
+				// the next one, then stops. Since every valid point owns
+				// 3/4 of a step of line on each side, an isolated point
+				// between gaps still shows as a short fragment. A notch
+				// that would be under a pixel wide (very dense data) isn't
+				// visible anyway, so the line is drawn straight through
+				// instead — but long gaps stay visible even in dense data,
+				// because their notch is wide. Missing points before the
+				// first or after the last valid point draw nothing.
+				float stepx = width / xdivisor; // gap between datapoints
+				float reach = 0.75f * stepx;	// how far stubs extend
+
 				nvgBeginPath(args.vg);
-				bool firstpoint = true;
-				nvgMoveTo(args.vg, margin, height);
+				int prev = -1; // index of the previous valid datapoint
+				float prevx = 0.f;
+				float prevy = 0.f;
 
 				for (int d = 0; d < len; d++)
 				{
-					if (!std::isnan(ds->data[d])) {
-						// Calculate x and y coords
-						float x = margin + (d * width / xdivisor);
-						// Y == zero at the TOP of the box.
-						float y = (height - 3) - (scalemap(ds->data[d], ds->datamin, ds->datamax,
-													0.f, height-6));
+					if (std::isnan(ds->data[d])) {
+						continue;
+					}
 
-						if (firstpoint) {
-							nvgMoveTo(args.vg, x, y);
-							firstpoint = false;
+					// Calculate x and y coords
+					float x = margin + (d * stepx);
+					// Y == zero at the TOP of the box.
+					float y = (height - 3) - (scalemap(ds->data[d], ds->datamin, ds->datamax,
+												0.f, height-6));
+
+					if (prev < 0) {
+						// First valid datapoint: start the line here
+						nvgMoveTo(args.vg, x, y);
+					} else if (d == prev + 1) {
+						// Adjacent to the previous one: join directly
+						nvgLineTo(args.vg, x, y);
+					} else {
+						// There's a gap of missing datapoints in between
+						float notch = (x - prevx) - 2.f * reach;
+						if (notch < 1.f) {
+							// Sub-pixel notch: draw straight through
+							nvgLineTo(args.vg, x, y);
 						} else {
+							// Stub out of the previous point, break, then
+							// stub into this one (y interpolated along the
+							// straight line between the two points)
+							float t = reach / (x - prevx);
+							nvgLineTo(args.vg, prevx + reach, prevy + (y - prevy) * t);
+							nvgMoveTo(args.vg, x - reach, y - (y - prevy) * t);
 							nvgLineTo(args.vg, x, y);
 						}
 					}
 
+					prev = d;
+					prevx = x;
+					prevy = y;
 				}
 
 				nvgStrokeColor(args.vg, color::fromHexString(module->faded));
