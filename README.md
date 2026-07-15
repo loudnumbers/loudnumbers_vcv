@@ -12,9 +12,11 @@ Right-click to load a CSV file, and then right-click again to select a column of
 
 Your CSV file must have a single header row containing column names, and you'll only be able to sonify columns containing numbers. Any missing or non-numeric values in your data will be replaced with null values that don't fire a gate.
 
+Your data is saved inside the patch file (up to 10,000 values), so a patch keeps playing even if you share it with someone else or the CSV file gets moved or deleted. If the file is still where it was, it's re-read when the patch opens, so edits to it show up — and you can right-click → *Reload CSV from disk* to re-read it at any time. Without the file, the patch plays its embedded copy and the column menu is locked until a reload succeeds.
+
 Send a trigger signal into the TRIG input to process the first datapoint and move to the next one. Send a trigger into the RESET input to return to the start of the dataset — nothing plays until the next trigger arrives at TRIG, which plays the first datapoint in time with your clock. The END output fires a trigger as the last datapoint plays, so patching END → RESET loops the dataset seamlessly.
 
-The top two outputs generate voltages from -5V to 5V and 0 to 10V respectively. The lower left output generates 1V/Oct pitch CV, scaled to the number of octaves selected using the RANGE knob. The lower right output generates a gate as each new datapoint is processed - change the lenth of this gate with the LENGTH knob.
+The top two outputs generate voltages from -5V to 5V and 0 to 10V respectively. The lower left output generates 1V/Oct pitch CV, scaled to the number of octaves selected using the RANGE knob. Ranges of 1–3 octaves rise from 0V; from 4 octaves upward the top pitch stays pinned at +4V and wider ranges add lower notes instead of ever-higher ones — hover over the knob to see the exact voltage span. The lower right output generates a gate as each new datapoint is processed - change the lenth of this gate with the LENGTH knob.
 
 ## FAQ
 

@@ -27,6 +27,45 @@ float scalemap(float x, float inmin, float inmax, float outmin, float outmax)
 	return outmin + (outmax - outmin) * ((x - inmin) / (inmax - inmin));
 };
 
+// The V/oct span for a given RANGE knob value. The mapping is
+// deliberately asymmetric: ranges of 1-3 octaves span 0V up to +range,
+// but from 4 octaves the top pins at +4V and the range grows downward.
+// That's because most users patch oscillators from somewhere mid-range,
+// and going more than ~4 octaves up from there is rarely useful — so a
+// wide range adds low notes rather than ever-higher ones. Shared by the
+// audio path (setCVOutputs) and the RANGE knob's tooltip.
+static void voctRange(float range, float &voctmin, float &voctmax)
+{
+	if (range < 4)
+	{
+		voctmin = 0;
+		voctmax = range;
+	}
+	else
+	{
+		voctmin = 4 - range;
+		voctmax = 4;
+	}
+}
+
+// Custom tooltip for the RANGE knob (issue #19): the asymmetric octave
+// mapping above is impossible to discover from the panel, so spell out
+// the exact voltage span right where the user is looking when they turn
+// the knob, e.g. "2 octaves (0V to +2V)" or "6 octaves (-2V to +4V)".
+struct RangeQuantity : ParamQuantity
+{
+	std::string getDisplayValueString() override
+	{
+		int range = (int)std::round(getValue());
+		float voctmin;
+		float voctmax;
+		voctRange(range, voctmin, voctmax);
+		std::string lo = (voctmin == 0.f) ? "0V" : string::f("%gV", voctmin);
+		return string::f("%d octave%s (%s to +%gV)",
+						 range, (range == 1) ? "" : "s", lo.c_str(), voctmax);
+	}
+};
+
 // A complete snapshot of a loaded dataset: the numbers plus everything
 // calculated from them. Snapshots are never modified after being built —
 // loading new data builds a whole new snapshot and swaps it in. That swap
@@ -103,7 +142,7 @@ struct LoudNumbers : Module
 	LoudNumbers()
 	{
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		configParam(RANGE_PARAM, 1, 8, 2, "Octave range", " octaves");
+		configParam<RangeQuantity>(RANGE_PARAM, 1, 8, 2, "Octave range");
 		getParamQuantity(RANGE_PARAM)->snapEnabled = true;
 		configParam(LENGTH_PARAM, 0.001f, 1.f, 0.1f, "Gate length", " s");
 		configInput(TRIG_INPUT, "Trigger");
@@ -143,11 +182,27 @@ struct LoudNumbers : Module
 	std::string savedcolname; // column name restored from a saved patch
 	bool csvloaded = false;
 
+	// Set when the module is playing the copy of the data embedded in
+	// the patch because the CSV file couldn't be read (issue #18). Only
+	// the selected column's data is embedded, so column switching is
+	// locked in the menu until a reload from disk succeeds.
+	bool embeddedonly = false;
+
+	// Datasets bigger than this aren't embedded in the patch: dataToJson
+	// runs on every autosave (~15s), and huge patches would make that
+	// slow. Those patches keep the old path-only behaviour.
+	static const int EMBED_MAX_VALUES = 10000;
+
 	// Values for colnum / the column request passed to processCSV()
 	static const int COLUMN_NONE = -1;	  // nothing selected: prompt the user
 	static const int COLUMN_AUTO = -2;	  // pick the first numeric column (new file)
 	static const int COLUMN_RESTORE = -3; // restore a saved patch's column by name
 	std::atomic<bool> badcsv{false};
+	// When badcsv is set, this says which kind of problem it was: the
+	// file is missing (moved/renamed/deleted — fixable by putting it
+	// back and reloading) versus present but unparseable. The display
+	// words its message accordingly.
+	std::atomic<bool> filemissing{false};
 	std::atomic<int> row{-1}; // because the first thing we do is increment it
 
 	// Set when a reset has moved the playhead back to the first datapoint
@@ -177,7 +232,8 @@ struct LoudNumbers : Module
 	std::string white = "#FFFBE4";
 	std::string salmon = "#FF7272"; // panel background, fills the hollow circle
 
-	// Save and retrieve menu choice(s).
+	// Save and retrieve menu choice(s), plus a copy of the loaded data
+	// so the patch is portable (issue #18).
 	json_t* dataToJson() override {
 		if (csvloaded) {
 			json_t* rootJ = json_object();
@@ -189,6 +245,28 @@ struct LoudNumbers : Module
 			std::shared_ptr<const Dataset> ds = getDataset();
 			if (colnum >= 0 && colnum < (int)ds->columns.size()) {
 				json_object_set_new(rootJ, "default_column_name", json_string(ds->columns[colnum].c_str()));
+			}
+
+			// Save the column names and which of them hold numbers, so
+			// the column menu still makes sense without the file
+			json_t* columnsJ = json_array();
+			json_t* colhasdataJ = json_array();
+			for (size_t i = 0; i < ds->columns.size(); i++) {
+				json_array_append_new(columnsJ, json_string(ds->columns[i].c_str()));
+				json_array_append_new(colhasdataJ, json_boolean(ds->colhasdata[i]));
+			}
+			json_object_set_new(rootJ, "columns", columnsJ);
+			json_object_set_new(rootJ, "colhasdata", colhasdataJ);
+
+			// Embed the selected column's data, unless the dataset is
+			// over the embedding cap (see EMBED_MAX_VALUES)
+			if (colnum >= 0 && ds->length() > 0 && ds->length() <= EMBED_MAX_VALUES) {
+				json_t* dataJ = json_array();
+				for (float v : ds->data) {
+					// JSON has no NaN, so missing values become nulls
+					json_array_append_new(dataJ, std::isnan(v) ? json_null() : json_real(v));
+				}
+				json_object_set_new(rootJ, "data", dataJ);
 			}
 			return rootJ;
 		} else {
@@ -212,7 +290,68 @@ struct LoudNumbers : Module
 			currentpath = p;
 			processCSV(currentpath, COLUMN_RESTORE);
 			csvloaded = true;
+
+			// If the file couldn't be read — moved, renamed, deleted, or
+			// the patch came from someone else's computer — fall back to
+			// the copy of the data embedded in the patch. When the file
+			// IS readable it wins, so editing the CSV and reopening the
+			// patch still picks up the edits.
+			if (badcsv) {
+				loadEmbeddedData(rootJ);
+			}
 		}
+	}
+
+	// Build a dataset from the data embedded in the patch, used when the
+	// original CSV file can't be read. Leaves the invalid-CSV state
+	// untouched if the patch has no embedded data (it predates embedding,
+	// or the dataset was over the embedding cap).
+	void loadEmbeddedData(json_t* rootJ)
+	{
+		json_t* dataJ = json_object_get(rootJ, "data");
+		if (!dataJ || json_array_size(dataJ) == 0) {
+			return;
+		}
+
+		auto ds = std::make_shared<Dataset>();
+
+		// The embedded column data (nulls are missing values)
+		size_t i;
+		json_t* v;
+		json_array_foreach(dataJ, i, v) {
+			ds->data.push_back(json_is_number(v) ? (float)json_number_value(v) : NAN);
+		}
+		ds->calcMinMax();
+
+		// The column names, so the menu still lists them (locked)
+		json_t* columnsJ = json_object_get(rootJ, "columns");
+		json_t* colhasdataJ = json_object_get(rootJ, "colhasdata");
+		if (columnsJ) {
+			json_array_foreach(columnsJ, i, v) {
+				const char* name = json_string_value(v);
+				ds->columns.push_back(name ? name : "");
+				json_t* h = colhasdataJ ? json_array_get(colhasdataJ, i) : NULL;
+				ds->colhasdata.push_back(h ? json_is_true(h) : false);
+			}
+		}
+		if (ds->columns.empty()) {
+			// Shouldn't happen, but keep the menu and display sane
+			ds->columns.push_back(savedcolname.empty() ? "Embedded data" : savedcolname);
+			ds->colhasdata.assign(1, true);
+		}
+		if (colnum < 0 || colnum >= (int)ds->columns.size()) {
+			colnum = 0;
+		}
+
+		// Publish, same as the end of processCSV()
+		row = -1;
+		resetarmed = false;
+		playingrow = -1;
+		cued = true;
+		setDataset(ds);
+		badcsv = false;
+		embeddedonly = true;
+		INFO("using embedded data: %i values", ds->length());
 	}
 
 	// Trigger for incoming gate detection
@@ -225,21 +364,10 @@ struct LoudNumbers : Module
 	// checks that r is in range and not a NaN (missing) value.
 	void setCVOutputs(const Dataset &ds, int r)
 	{
-		// Get v/oct min and max: ranges of 1-3 octaves span 0V up to
-		// +range; from 4 octaves the top pins at +4V and grows downward.
+		// Get v/oct min and max from the RANGE knob (see voctRange)
 		float voctmin;
 		float voctmax;
-
-		if (params[RANGE_PARAM].getValue() < 4)
-		{
-			voctmin = 0;
-			voctmax = params[RANGE_PARAM].getValue();
-		}
-		else
-		{
-			voctmin = 4 - params[RANGE_PARAM].getValue();
-			voctmax = 4;
-		}
+		voctRange(params[RANGE_PARAM].getValue(), voctmin, voctmax);
 
 		// Set the voltages to the data
 		outputs[MINUSFIVETOFIVE_OUTPUT].setVoltage(scalemap(ds.data[r], ds.datamin, ds.datamax, -5.f, 5.f));
@@ -369,6 +497,29 @@ struct LoudNumbers : Module
 		csvloaded = true;
 	}
 
+	// Re-read the current CSV from disk (context menu), keeping the
+	// selected column — matched by name, in case the file's columns have
+	// been reordered by an edit. If the file can't be read this shows
+	// the usual invalid-CSV state rather than silently keeping stale
+	// data.
+	void reloadCSV()
+	{
+		// Take the column name to restore from the live dataset — but
+		// NOT in the invalid-CSV state, where the live dataset doesn't
+		// reflect the file (it's whatever loaded before, or the default
+		// data): overwriting savedcolname from it would clobber the
+		// column name remembered from the patch.
+		if (!badcsv)
+		{
+			std::shared_ptr<const Dataset> ds = getDataset();
+			if (colnum >= 0 && colnum < (int)ds->columns.size())
+			{
+				savedcolname = ds->columns[colnum];
+			}
+		}
+		processCSV(currentpath, COLUMN_RESTORE);
+	}
+
 	// Load a CSV file and select a column to sonify. 'request' is either a
 	// column index (from the menu) or one of the COLUMN_ constants above.
 	void processCSV(std::string path, int request)
@@ -376,6 +527,15 @@ struct LoudNumbers : Module
 		INFO("Processing CSV: %s", path.c_str());
 
 		try {
+			// Distinguish a missing file from an unparseable one, so the
+			// display can tell the user which problem they have
+			if (!system::isFile(path))
+			{
+				filemissing = true;
+				throw std::runtime_error("file not found");
+			}
+			filemissing = false;
+
 			// Setting values that aren't numbers to NaN (rather than throwing error)
 			rapidcsv::Document doc(path,
 								rapidcsv::LabelParams(),
@@ -508,6 +668,7 @@ struct LoudNumbers : Module
 			cued = true; // show the hollow circle: cued at the start
 			setDataset(ds);
 			badcsv = false;
+			embeddedonly = false; // this data came from a real file
 
 		} catch (...) {
 			badcsv = true;
@@ -536,7 +697,15 @@ struct DataViz : Widget
 				nvgFillColor(args.vg, color::fromHexString(module->white));
 				nvgFontSize(args.vg, 14);
 				nvgTextAlign(args.vg, NVG_ALIGN_CENTER);
-				nvgText(args.vg, width/2, height/2, "Invalid CSV", NULL);
+				if (module->filemissing) {
+					// The file has moved rather than being unreadable:
+					// tell the user how to fix it
+					nvgText(args.vg, width/2, height/2 - 16, "CSV file not found", NULL);
+					nvgText(args.vg, width/2, height/2, "Right-click to reload", NULL);
+					nvgText(args.vg, width/2, height/2 + 16, "or load a new file", NULL);
+				} else {
+					nvgText(args.vg, width/2, height/2, "Invalid CSV", NULL);
+				}
 			} else if (module->colnum < 0) {
 				// A file is loaded but no column is selected (e.g. a saved
 				// patch's column no longer exists in the file)
@@ -748,6 +917,16 @@ struct LoudNumbersWidget : ModuleWidget
 										  module->loadCSV();
 									  }));
 
+		// Re-read the current file from disk (e.g. after editing it)
+		if (module->csvloaded)
+		{
+			menu->addChild(createMenuItem("Reload CSV from disk", "",
+										  [=]()
+										  {
+											  module->reloadCSV();
+										  }));
+		}
+
 		// Spacer
 		menu->addChild(new MenuSeparator());
 
@@ -761,8 +940,10 @@ struct LoudNumbersWidget : ModuleWidget
 			item->val = i;
 			item->module = module;
 			// Columns with no numeric values can't be sonified, so grey
-			// them out
-			item->disabled = !ds->colhasdata[i];
+			// them out. When playing patch-embedded data (the CSV file
+			// couldn't be read), only the selected column's data exists,
+			// so the whole list is locked until a reload succeeds.
+			item->disabled = !ds->colhasdata[i] || module->embeddedonly;
 			menu->addChild(item);
 		}
 	}
