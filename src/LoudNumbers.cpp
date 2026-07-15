@@ -165,10 +165,17 @@ struct LoudNumbers : Module
 	// audio thread writes it and the DataViz widget reads it.
 	std::atomic<int> playingrow{-1};
 
+	// Set while the sequence is cued at the start but hasn't begun
+	// playing: when data is (re)loaded, and after a manual reset. The
+	// display then shows a hollow circle on the first datapoint instead
+	// of a filled one. Atomic for the same reason as playingrow.
+	std::atomic<bool> cued{true};
+
 	// Style variables
 	std::string main = "#003380";
 	std::string faded = "#805279";
 	std::string white = "#FFFBE4";
+	std::string salmon = "#FF7272"; // panel background, fills the hollow circle
 
 	// Save and retrieve menu choice(s).
 	json_t* dataToJson() override {
@@ -264,6 +271,20 @@ struct LoudNumbers : Module
 		{
 			row = 0;
 			resetarmed = true;
+
+			// Manual resets and END -> RESET loop resets arrive as
+			// identical triggers, but the display treats them
+			// differently. A loop reset lands while our own END pulse is
+			// still high (the cable adds only a sample of delay), so in
+			// that case the filled circle stays on the last datapoint
+			// while it plays out. Any other reset is manual: the circle
+			// leaves the playing datapoint immediately and a hollow
+			// "cued" circle appears on datapoint 0 instead.
+			if (endPulse.remaining <= 0.f)
+			{
+				playingrow = -1;
+				cued = true;
+			}
 		}
 
 		// If a gate is high in the trigger input, play the next datapoint
@@ -285,8 +306,10 @@ struct LoudNumbers : Module
 			if (r >= 0 && r < len)
 			{
 				// This datapoint is now the one sounding, so the display
-				// playhead moves here.
+				// playhead moves here (as a filled circle, so the cued
+				// state ends).
 				playingrow = r;
+				cued = false;
 
 				// If it's not a NaN (missing) value, play it. Missing
 				// data fires no gate and the CV outputs hold, so it's
@@ -310,6 +333,7 @@ struct LoudNumbers : Module
 				// The playhead has run past the end (no reset patched):
 				// nothing plays and the display playhead disappears.
 				playingrow = -1;
+				cued = false;
 			}
 		}
 
@@ -481,6 +505,7 @@ struct LoudNumbers : Module
 			row = -1; // because the first thing we do is increment it
 			resetarmed = false; // fresh data starts unarmed
 			playingrow = -1; // nothing is sounding until the first trigger
+			cued = true; // show the hollow circle: cued at the start
 			setDataset(ds);
 			badcsv = false;
 
@@ -557,10 +582,15 @@ struct DataViz : Widget
 				nvgStroke(args.vg);
 				nvgClosePath(args.vg);
 
-				// Draw a circle at the datapoint that's currently
-				// sounding (not at 'row', which a reset moves before
-				// anything plays)
-				int r = module->playingrow;
+				// Draw the playhead circle. A hollow circle on the first
+				// datapoint means the sequence is cued there but hasn't
+				// begun (fresh data, or a manual reset); a filled circle
+				// marks the datapoint that's currently sounding (not
+				// 'row', which a reset moves before anything plays).
+				// Missing (NaN) datapoints have no vertical position, so
+				// no circle is drawn on them.
+				bool hollow = module->cued;
+				int r = hollow ? 0 : (int)module->playingrow;
 				if (r >= 0 && r < len && !std::isnan(ds->data[r]))
 				{
 					// Calculate x and y coords
@@ -570,8 +600,21 @@ struct DataViz : Widget
 													0.f, height-6));
 					nvgBeginPath(args.vg);
 					nvgCircle(args.vg, x, y, mm2px(circ_size));
-					nvgFillColor(args.vg, color::fromHexString(module->main));
-					nvgFill(args.vg);
+					if (hollow)
+					{
+						// Outline only: fill with the panel background so
+						// the circle reads as an empty slot
+						nvgFillColor(args.vg, color::fromHexString(module->salmon));
+						nvgFill(args.vg);
+						nvgStrokeColor(args.vg, color::fromHexString(module->main));
+						nvgStrokeWidth(args.vg, mm2px(0.3));
+						nvgStroke(args.vg);
+					}
+					else
+					{
+						nvgFillColor(args.vg, color::fromHexString(module->main));
+						nvgFill(args.vg);
+					}
 					nvgClosePath(args.vg);
 				}
 

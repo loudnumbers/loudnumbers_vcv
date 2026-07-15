@@ -62,9 +62,13 @@ it) and restart Rack.
   time with the clock. END fires as the last datapoint plays
   (end-of-cycle), so an END → RESET loop is gapless (N datapoints = N
   clock ticks) and resets are always in time. The display playhead
-  tracks what's sounding, not the armed position: it stays on the
-  last-played datapoint through a reset until the next TRIG, and
-  disappears if the playhead runs past the end without a reset.
+  tracks what's sounding, not the armed position: a filled circle marks
+  the last-played datapoint, and a hollow circle on datapoint 0 means
+  the sequence is cued but hasn't begun (fresh data, or a manual
+  reset). A reset arriving while END is still high counts as an
+  END → RESET loop reset instead: the filled circle stays on the last
+  datapoint while it plays out. The circle disappears if the playhead
+  runs past the end without a reset.
 - Columns with no numeric values can't be selected (greyed out in the
   menu); a file with no numeric columns at all is an invalid CSV.
 - Flat data (all values identical, incl. single-row files) maps to the
@@ -78,7 +82,7 @@ it) and restart Rack.
 - `process()` runs on the audio thread; `processCSV()` and the DataViz widget
   run on UI-side threads. Loaded data crosses that boundary only as an
   immutable `Dataset` snapshot published via `getDataset()`/`setDataset()`;
-  the remaining shared scalars (`row`, `playingrow`, `badcsv`,
+  the remaining shared scalars (`row`, `playingrow`, `cued`, `badcsv`,
   `resetarmed`) are atomics.
   Don't add unsynchronized shared state — extend the snapshot, or use an
   atomic, instead.
