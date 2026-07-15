@@ -69,6 +69,14 @@ it) and restart Rack.
   END → RESET loop reset instead: the filled circle stays on the last
   datapoint while it plays out. The circle disappears if the playhead
   runs past the end without a reset.
+  Known edge cases of the "END still high" test (owner-approved,
+  display-only — the sequencing is identical either way): a manual
+  reset landing inside END's 10ms pulse reads as a loop reset, so no
+  hollow circle appears; an END → RESET connection routed through
+  modules that delay the trigger by more than 10ms reads as manual, so
+  the hollow circle flashes at each loop point. And since a missing
+  (NaN) datapoint 0 has no vertical position, no cue circle is drawn
+  while cued on it.
 - Columns with no numeric values can't be selected (greyed out in the
   menu); a file with no numeric columns at all is an invalid CSV.
 - Flat data (all values identical, incl. single-row files) maps to the
