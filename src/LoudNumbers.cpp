@@ -198,6 +198,11 @@ struct LoudNumbers : Module
 	static const int COLUMN_AUTO = -2;	  // pick the first numeric column (new file)
 	static const int COLUMN_RESTORE = -3; // restore a saved patch's column by name
 	std::atomic<bool> badcsv{false};
+	// When badcsv is set, this says which kind of problem it was: the
+	// file is missing (moved/renamed/deleted — fixable by putting it
+	// back and reloading) versus present but unparseable. The display
+	// words its message accordingly.
+	std::atomic<bool> filemissing{false};
 	std::atomic<int> row{-1}; // because the first thing we do is increment it
 
 	// Set when a reset has moved the playhead back to the first datapoint
@@ -522,6 +527,15 @@ struct LoudNumbers : Module
 		INFO("Processing CSV: %s", path.c_str());
 
 		try {
+			// Distinguish a missing file from an unparseable one, so the
+			// display can tell the user which problem they have
+			if (!system::isFile(path))
+			{
+				filemissing = true;
+				throw std::runtime_error("file not found");
+			}
+			filemissing = false;
+
 			// Setting values that aren't numbers to NaN (rather than throwing error)
 			rapidcsv::Document doc(path,
 								rapidcsv::LabelParams(),
@@ -683,7 +697,15 @@ struct DataViz : Widget
 				nvgFillColor(args.vg, color::fromHexString(module->white));
 				nvgFontSize(args.vg, 14);
 				nvgTextAlign(args.vg, NVG_ALIGN_CENTER);
-				nvgText(args.vg, width/2, height/2, "Invalid CSV", NULL);
+				if (module->filemissing) {
+					// The file has moved rather than being unreadable:
+					// tell the user how to fix it
+					nvgText(args.vg, width/2, height/2 - 16, "CSV file not found", NULL);
+					nvgText(args.vg, width/2, height/2, "Right-click to reload", NULL);
+					nvgText(args.vg, width/2, height/2 + 16, "or load a new file", NULL);
+				} else {
+					nvgText(args.vg, width/2, height/2, "Invalid CSV", NULL);
+				}
 			} else if (module->colnum < 0) {
 				// A file is loaded but no column is selected (e.g. a saved
 				// patch's column no longer exists in the file)

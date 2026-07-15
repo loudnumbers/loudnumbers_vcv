@@ -70,7 +70,9 @@ it) and restart Rack.
   (so edits show up); the embedded copy is the fallback, and in that
   state column switching is locked (`embeddedonly`) until
   "Reload CSV from disk" succeeds. A reload with the file still missing
-  shows the invalid-CSV state rather than silently keeping stale data.
+  shows the error state rather than silently keeping stale data; the
+  display distinguishes "CSV file not found" (with a reload hint) from
+  "Invalid CSV" (file present but unparseable) via `filemissing`.
 - Looping is done by the user patching END → RESET, not built in. RESET
   arms rather than plays: it returns the playhead to datapoint 0 with no
   gate, holding the CV outputs, and the next TRIG plays datapoint 0 in
