@@ -499,10 +499,18 @@ struct LoudNumbers : Module
 	// data.
 	void reloadCSV()
 	{
-		std::shared_ptr<const Dataset> ds = getDataset();
-		if (colnum >= 0 && colnum < (int)ds->columns.size())
+		// Take the column name to restore from the live dataset — but
+		// NOT in the invalid-CSV state, where the live dataset doesn't
+		// reflect the file (it's whatever loaded before, or the default
+		// data): overwriting savedcolname from it would clobber the
+		// column name remembered from the patch.
+		if (!badcsv)
 		{
-			savedcolname = ds->columns[colnum];
+			std::shared_ptr<const Dataset> ds = getDataset();
+			if (colnum >= 0 && colnum < (int)ds->columns.size())
+			{
+				savedcolname = ds->columns[colnum];
+			}
 		}
 		processCSV(currentpath, COLUMN_RESTORE);
 	}
