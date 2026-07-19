@@ -609,8 +609,10 @@ struct LoudNumbers : Module
 		// Default directory
 		std::string dir = asset::user("../");
 
-		// Get a path from the user
-		char *pathC = osdialog_file(OSDIALOG_OPEN, dir.c_str(), NULL, osdialog_filters_parse("Source:csv"));
+		// Get a path from the user. Allow tab- and text-delimited files too,
+		// not just .csv (issue #16): with a selectable delimiter, .tsv and
+		// .txt data files are just as valid.
+		char *pathC = osdialog_file(OSDIALOG_OPEN, dir.c_str(), NULL, osdialog_filters_parse("Data files:csv,tsv,txt"));
 
 		// If nothing gets chosen, don't do anything
 		if (!pathC)
