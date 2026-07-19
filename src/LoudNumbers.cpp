@@ -236,9 +236,10 @@ struct LoudNumbers : Module
 	std::atomic<int> queuedrow{-1};
 
 	// Style variables
-	std::string main = "#003380";
-	std::string faded = "#805279";
-	std::string white = "#FFFBE4";
+	std::string main = "#173561";  // deep blue: line playhead and cued/queued rings
+	std::string faded = "#805279"; // muted plum: the data line and its hover
+	std::string white = "#FFFBE4"; // cream: on-display messages
+	std::string cream = "#FFFDF1"; // cream used for the interactive knob/jack labels; the hover ring
 	std::string salmon = "#FF7272"; // panel background colour
 
 	// Save and retrieve menu choice(s), plus a copy of the loaded data
@@ -953,13 +954,14 @@ struct DataViz : Widget
 					nvgClosePath(args.vg);
 				}
 
-				// Draw the hover highlight (issue #14): a hollow blue ring
+				// Draw the hover highlight (issue #14): a hollow cream ring
 				// marks the datapoint the mouse is over (nearest by x,
 				// ignoring y). Left-clicking queues that datapoint. It uses
-				// the same blue as the cued/queued ring so hovering reads as
-				// "click to queue this". datapointAt() only ever returns a
-				// datapoint that has a value, so missing points are skipped
-				// rather than highlighted.
+				// the cream of the knob and jack labels, the module's other
+				// interactive elements, so hovering reads as "you can act
+				// here". datapointAt() only ever returns a datapoint that has
+				// a value, so missing points are skipped rather than
+				// highlighted.
 				if (hoverrow >= 0 && hoverrow < len && !std::isnan(ds->data[hoverrow]))
 				{
 					float x = margin + (hoverrow * width / xdivisor);
@@ -967,7 +969,7 @@ struct DataViz : Widget
 															 0.f, height - 6));
 					nvgBeginPath(args.vg);
 					nvgCircle(args.vg, x, y, mm2px(circ_size));
-					nvgStrokeColor(args.vg, color::fromHexString(module->main));
+					nvgStrokeColor(args.vg, color::fromHexString(module->cream));
 					nvgStrokeWidth(args.vg, mm2px(0.3));
 					nvgStroke(args.vg);
 					nvgClosePath(args.vg);
