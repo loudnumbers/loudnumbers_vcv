@@ -11,7 +11,7 @@
   "manualUrl": "https://github.com/loudnumbers/loudnumbers_vcv",
   "sourceUrl": "https://github.com/loudnumbers/loudnumbers_vcv",
   "donateUrl": "",
-  "changelogUrl": "https://github.com/loudnumbers/loudnumbers_vcv",
+  "changelogUrl": "https://github.com/loudnumbers/loudnumbers_vcv/blob/main/CHANGELOG.md",
   "modules": [
     {
       "slug": "LoudNumbers",
