@@ -110,13 +110,14 @@ jobs:
             echo "Plugin version from plugin.json 'v$pluginversion' doesn't match with tag version '${{ env.CI_REF_NAME }}'"
             exit 1
           fi
+      # No name/body here: if a release for this tag already exists (e.g. a
+      # hand-written draft that was published), leave its title and notes
+      # alone instead of overwriting them. A release created from scratch
+      # gets the tag name as its title and empty notes.
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref }}
-          name: Release ${{ env.CI_REF_NAME }}
-          body: |
-            ${{ env.CI_REPOSITORY_NAME }} VCV Rack Plugin ${{ env.CI_REF_NAME }}
           draft: false
           prerelease: false
       - uses: actions/download-artifact@v4
