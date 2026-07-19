@@ -239,7 +239,7 @@ struct LoudNumbers : Module
 	std::string main = "#003380";
 	std::string faded = "#805279";
 	std::string white = "#FFFBE4";
-	std::string salmon = "#FF7272"; // panel background, fills the hollow circle
+	std::string salmon = "#FF7272"; // panel background colour
 
 	// Save and retrieve menu choice(s), plus a copy of the loaded data
 	// so the patch is portable (issue #18).
@@ -936,10 +936,11 @@ struct DataViz : Widget
 					nvgCircle(args.vg, x, y, mm2px(circ_size));
 					if (hollow)
 					{
-						// Outline only: fill with the panel background so
-						// the circle reads as an empty slot
-						nvgFillColor(args.vg, color::fromHexString(module->salmon));
-						nvgFill(args.vg);
+						// Outline only, no fill, so the data line stays
+						// visible through the ring. Marks a datapoint cued
+						// to play next: datapoint 0 when the sequence is
+						// cued at the start, or a datapoint queued by
+						// clicking the chart (issue #14).
 						nvgStrokeColor(args.vg, color::fromHexString(module->main));
 						nvgStrokeWidth(args.vg, mm2px(0.3));
 						nvgStroke(args.vg);
@@ -952,12 +953,13 @@ struct DataViz : Widget
 					nvgClosePath(args.vg);
 				}
 
-				// Draw the hover highlight (issue #14): a faint hollow
-				// circle marks the datapoint the mouse is over (nearest by
-				// x, ignoring y). Left-clicking queues that datapoint.
-				// datapointAt() only ever returns a datapoint that has a
-				// value, so missing points are skipped rather than
-				// highlighted.
+				// Draw the hover highlight (issue #14): a hollow blue ring
+				// marks the datapoint the mouse is over (nearest by x,
+				// ignoring y). Left-clicking queues that datapoint. It uses
+				// the same blue as the cued/queued ring so hovering reads as
+				// "click to queue this". datapointAt() only ever returns a
+				// datapoint that has a value, so missing points are skipped
+				// rather than highlighted.
 				if (hoverrow >= 0 && hoverrow < len && !std::isnan(ds->data[hoverrow]))
 				{
 					float x = margin + (hoverrow * width / xdivisor);
@@ -965,7 +967,7 @@ struct DataViz : Widget
 															 0.f, height - 6));
 					nvgBeginPath(args.vg);
 					nvgCircle(args.vg, x, y, mm2px(circ_size));
-					nvgStrokeColor(args.vg, color::fromHexString(module->faded));
+					nvgStrokeColor(args.vg, color::fromHexString(module->main));
 					nvgStrokeWidth(args.vg, mm2px(0.3));
 					nvgStroke(args.vg);
 					nvgClosePath(args.vg);
