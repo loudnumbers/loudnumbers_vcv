@@ -4,6 +4,7 @@
 #include <iterator>
 #include <atomic>
 #include <memory>
+#include <fstream>
 #include <math.h>
 #include <osdialog.h>
 #define HAS_CODECVT
@@ -110,6 +111,69 @@ struct Dataset
 	}
 };
 
+// A human-readable name for a delimiter character, for the context menu
+// (e.g. "comma", "tab"). Anything without a common name shows as itself.
+static std::string delimiterName(char c)
+{
+	switch (c)
+	{
+	case ',':
+		return "comma";
+	case '\t':
+		return "tab";
+	case ';':
+		return "semicolon";
+	case '|':
+		return "pipe";
+	case ' ':
+		return "space";
+	case ':':
+		return "colon";
+	default:
+		return std::string(1, c);
+	}
+}
+
+// Guess a CSV's delimiter (issue #16) by counting candidate separators in
+// the file's first non-empty line and returning the most common one. This
+// is the same kind of heuristic a spreadsheet import uses; it can't be
+// perfect, so it falls back to a comma when nothing stands out. Only used
+// in DELIM_AUTO mode.
+static char sniffDelimiter(const std::string &path)
+{
+	std::ifstream file(path);
+	std::string line;
+	while (std::getline(file, line))
+	{
+		if (!line.empty())
+		{
+			break;
+		}
+	}
+
+	// The "common set" of candidates the owner chose for auto-detect.
+	const char candidates[] = {',', '\t', ';', '|'};
+	char best = ',';
+	int bestcount = 0;
+	for (char cand : candidates)
+	{
+		int count = 0;
+		for (char ch : line)
+		{
+			if (ch == cand)
+			{
+				count++;
+			}
+		}
+		if (count > bestcount)
+		{
+			bestcount = count;
+			best = cand;
+		}
+	}
+	return best;
+}
+
 struct LoudNumbers : Module
 {
 
@@ -182,6 +246,22 @@ struct LoudNumbers : Module
 	std::string savedcolname; // column name restored from a saved patch
 	bool csvloaded = false;
 
+	// CSV delimiter selection (issue #16). The parser reads one character
+	// as the column separator. DELIM_AUTO sniffs the file's header and
+	// picks the most common candidate; the others are fixed characters, and
+	// DELIM_CUSTOM uses whatever single character the user typed. The choice
+	// is saved in the patch so a reopened file re-parses the same way. These
+	// are UI-thread only — the delimiter shapes the Dataset inside
+	// processCSV and never touches the audio thread — so no atomics needed.
+	static const int DELIM_AUTO = 0;
+	static const int DELIM_COMMA = 1;
+	static const int DELIM_TAB = 2;
+	static const int DELIM_SEMICOLON = 3;
+	static const int DELIM_CUSTOM = 4;
+	int delimMode = DELIM_AUTO;
+	char customDelim = '|';	  // used when delimMode == DELIM_CUSTOM
+	char detectedDelim = ','; // last auto-detect result, for the menu label
+
 	// Set when the module is playing the copy of the data embedded in
 	// the patch because the CSV file couldn't be read (issue #18). Only
 	// the selected column's data is embedded, so column switching is
@@ -249,6 +329,13 @@ struct LoudNumbers : Module
 			json_t* rootJ = json_object();
 			json_object_set_new(rootJ, "default_path", json_string(currentpath.c_str()));
 			json_object_set_new(rootJ, "default_column", json_integer(colnum));
+
+			// Save the delimiter choice (issue #16) so a reopened patch
+			// re-parses the file the same way. The custom character is
+			// stored as a one-character string.
+			json_object_set_new(rootJ, "delimiter_mode", json_integer(delimMode));
+			char cbuf[2] = {customDelim, '\0'};
+			json_object_set_new(rootJ, "custom_delimiter", json_string(cbuf));
 			// Also save the column NAME, so that if the file changes on
 			// disk we can tell whether the saved column still exists
 			// instead of silently playing a different one.
@@ -294,6 +381,23 @@ struct LoudNumbers : Module
 		if (default_colnameJ) {
 			savedcolname = json_string_value(default_colnameJ);
 		}
+
+		// Restore the delimiter choice (issue #16) BEFORE parsing the file
+		// below, so it's read with the right separator. Patches saved
+		// before this feature have no delimiter fields and keep the
+		// DELIM_AUTO default.
+		json_t* delimModeJ = json_object_get(rootJ, "delimiter_mode");
+		if (delimModeJ) {
+			delimMode = json_integer_value(delimModeJ);
+		}
+		json_t* customDelimJ = json_object_get(rootJ, "custom_delimiter");
+		if (customDelimJ) {
+			const char* s = json_string_value(customDelimJ);
+			if (s && s[0]) {
+				customDelim = s[0];
+			}
+		}
+
 		if (default_pathJ) {
 			std::string p = json_string_value(default_pathJ);
 			INFO("LOADING PATH: %s", p.c_str());
@@ -505,8 +609,10 @@ struct LoudNumbers : Module
 		// Default directory
 		std::string dir = asset::user("../");
 
-		// Get a path from the user
-		char *pathC = osdialog_file(OSDIALOG_OPEN, dir.c_str(), NULL, osdialog_filters_parse("Source:csv"));
+		// Get a path from the user. Allow tab- and text-delimited files too,
+		// not just .csv (issue #16): with a selectable delimiter, .tsv and
+		// .txt data files are just as valid.
+		char *pathC = osdialog_file(OSDIALOG_OPEN, dir.c_str(), NULL, osdialog_filters_parse("Data files:csv,tsv,txt"));
 
 		// If nothing gets chosen, don't do anything
 		if (!pathC)
@@ -546,11 +652,73 @@ struct LoudNumbers : Module
 		processCSV(currentpath, COLUMN_RESTORE);
 	}
 
+	// The separator character to parse 'path' with, from the current
+	// delimiter mode (issue #16). In auto mode it sniffs the file and
+	// remembers the result so the menu can show it.
+	char separatorForRead(const std::string &path)
+	{
+		switch (delimMode)
+		{
+		case DELIM_COMMA:
+			return ',';
+		case DELIM_TAB:
+			return '\t';
+		case DELIM_SEMICOLON:
+			return ';';
+		case DELIM_CUSTOM:
+			return customDelim;
+		case DELIM_AUTO:
+		default:
+			detectedDelim = sniffDelimiter(path);
+			return detectedDelim;
+		}
+	}
+
+	// Re-read the current file after the delimiter changes (issue #16). A
+	// different separator gives entirely different columns, so there's no
+	// sensible column to keep — this picks the first numeric one, like a
+	// fresh load. If the new delimiter doesn't yield usable data the normal
+	// invalid-CSV state shows, and the user can pick another delimiter.
+	void reparseWithDelimiter()
+	{
+		if (csvloaded)
+		{
+			processCSV(currentpath, COLUMN_AUTO);
+		}
+	}
+
+	// A short label for the current delimiter choice, shown next to the
+	// "Delimiter" menu item (issue #16). Auto mode shows what it detected.
+	std::string delimiterSummary()
+	{
+		switch (delimMode)
+		{
+		case DELIM_COMMA:
+			return "comma";
+		case DELIM_TAB:
+			return "tab";
+		case DELIM_SEMICOLON:
+			return "semicolon";
+		case DELIM_CUSTOM:
+			return delimiterName(customDelim);
+		case DELIM_AUTO:
+		default:
+			return "auto (" + delimiterName(detectedDelim) + ")";
+		}
+	}
+
 	// Load a CSV file and select a column to sonify. 'request' is either a
 	// column index (from the menu) or one of the COLUMN_ constants above.
 	void processCSV(std::string path, int request)
 	{
 		INFO("Processing CSV: %s", path.c_str());
+
+		// Remember the path straight away, even if parsing fails below. That
+		// way changing the delimiter (or "Reload CSV from disk") can re-read
+		// the same file after a failed parse — e.g. loading a colon-separated
+		// file, which auto-detect misses, then fixing it with Custom ':'
+		// instead of having to load the file all over again.
+		currentpath = path;
 
 		try {
 			// Distinguish a missing file from an unparseable one, so the
@@ -562,10 +730,15 @@ struct LoudNumbers : Module
 			}
 			filemissing = false;
 
+			// Pick the column separator (issue #16): a fixed character, the
+			// custom one, or — in auto mode — sniffed from the file. rapidcsv
+			// takes a single char as the separator.
+			char sep = separatorForRead(path);
+
 			// Setting values that aren't numbers to NaN (rather than throwing error)
 			rapidcsv::Document doc(path,
 								rapidcsv::LabelParams(),
-							rapidcsv::SeparatorParams(),
+							rapidcsv::SeparatorParams(sep),
 							rapidcsv::ConverterParams(true /* pHasDefaultConverter */,
 														NAN /* pDefaultFloat */,
 														0 /* pDefaultInteger */));
@@ -686,8 +859,8 @@ struct LoudNumbers : Module
 			}
 
 			// Publish: from here on the audio thread and UI see the new data.
+			// (currentpath was already set at the top of this function.)
 			colnum = col;
-			currentpath = path;
 			row = -1; // because the first thing we do is increment it
 			resetarmed = false; // fresh data starts unarmed
 			playingrow = -1; // nothing is sounding until the first trigger
@@ -1054,6 +1227,57 @@ struct LoudNumbersWidget : ModuleWidget
 		}
 	};
 
+	// A radio row in the Delimiter submenu (issue #16). Choosing one sets
+	// the mode and re-reads the file with the new separator.
+	struct DelimiterModeItem : MenuItem
+	{
+		LoudNumbers *module;
+		int mode;
+		void onAction(const event::Action &e) override {
+			module->delimMode = mode;
+			module->reparseWithDelimiter();
+		}
+		void step() override {
+			rightText = (module->delimMode == mode) ? "✔" : "";
+			MenuItem::step();
+		}
+	};
+
+	// A text box in the Delimiter submenu for typing a custom separator
+	// character (issue #16). Pressing Enter applies the first character
+	// typed, switches to custom mode, re-reads the file, and closes the
+	// menu. rapidcsv only supports a single-character separator.
+	struct DelimiterField : ui::TextField
+	{
+		LoudNumbers *module;
+		DelimiterField()
+		{
+			box.size.x = 100;
+			placeholder = "e.g. |";
+		}
+		void onSelectKey(const event::SelectKey &e) override
+		{
+			if (e.action == GLFW_PRESS && (e.key == GLFW_KEY_ENTER || e.key == GLFW_KEY_KP_ENTER))
+			{
+				if (!text.empty())
+				{
+					module->customDelim = text[0];
+					module->delimMode = LoudNumbers::DELIM_CUSTOM;
+					module->reparseWithDelimiter();
+				}
+				// Close the menu once the character is committed
+				ui::MenuOverlay *overlay = getAncestorOfType<ui::MenuOverlay>();
+				if (overlay)
+				{
+					overlay->requestDelete();
+				}
+				e.consume(this);
+				return;
+			}
+			ui::TextField::onSelectKey(e);
+		}
+	};
+
 	// Add CSV loading capabilities to the right click menu
 	void appendContextMenu(Menu* menu) override
 	{
@@ -1077,6 +1301,51 @@ struct LoudNumbersWidget : ModuleWidget
 										  {
 											  module->reloadCSV();
 										  }));
+		}
+
+		// Delimiter submenu (issue #16). Only offered when a file is loaded
+		// and readable — when playing patch-embedded data (file missing)
+		// there's nothing to re-parse, so the choice is locked, like the
+		// column list.
+		if (module->csvloaded && !module->embeddedonly)
+		{
+			menu->addChild(createSubmenuItem("Delimiter", module->delimiterSummary(),
+											 [=](Menu *sub)
+											 {
+												 // Detect automatically, showing what it found
+												 DelimiterModeItem *autoItem = new DelimiterModeItem();
+												 autoItem->module = module;
+												 autoItem->mode = LoudNumbers::DELIM_AUTO;
+												 autoItem->text = "Detect automatically (" + delimiterName(module->detectedDelim) + ")";
+												 sub->addChild(autoItem);
+
+												 // Fixed presets
+												 const char *labels[] = {"Comma", "Tab", "Semicolon"};
+												 const int modes[] = {LoudNumbers::DELIM_COMMA, LoudNumbers::DELIM_TAB, LoudNumbers::DELIM_SEMICOLON};
+												 for (int i = 0; i < 3; i++)
+												 {
+													 DelimiterModeItem *it = new DelimiterModeItem();
+													 it->module = module;
+													 it->mode = modes[i];
+													 it->text = labels[i];
+													 sub->addChild(it);
+												 }
+
+												 // Custom, showing the current custom character
+												 DelimiterModeItem *customItem = new DelimiterModeItem();
+												 customItem->module = module;
+												 customItem->mode = LoudNumbers::DELIM_CUSTOM;
+												 customItem->text = "Custom (" + delimiterName(module->customDelim) + ")";
+												 sub->addChild(customItem);
+
+												 // Field to type a custom character
+												 sub->addChild(new MenuSeparator());
+												 sub->addChild(createMenuLabel("Custom character, then Enter:"));
+												 DelimiterField *field = new DelimiterField();
+												 field->module = module;
+												 field->text = std::string(1, module->customDelim);
+												 sub->addChild(field);
+											 }));
 		}
 
 		// Spacer
