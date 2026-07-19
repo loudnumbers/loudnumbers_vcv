@@ -226,6 +226,15 @@ struct LoudNumbers : Module
 	// of a filled one. Atomic for the same reason as playingrow.
 	std::atomic<bool> cued{true};
 
+	// The datapoint queued by a left-click on the chart (issue #14): the
+	// next TRIG plays this datapoint instead of stepping to the next one,
+	// then sequential play continues from there. -1 means nothing is
+	// queued. Set on the UI thread (DataViz click), read and cleared on the
+	// audio thread. A queued click and an armed reset can't both win a
+	// trigger: whichever happened last takes it (a reset clears the queue;
+	// a queued click overrides an armed reset when the trigger fires).
+	std::atomic<int> queuedrow{-1};
+
 	// Style variables
 	std::string main = "#003380";
 	std::string faded = "#805279";
@@ -348,6 +357,7 @@ struct LoudNumbers : Module
 		resetarmed = false;
 		playingrow = -1;
 		cued = true;
+		queuedrow = -1;
 		setDataset(ds);
 		badcsv = false;
 		embeddedonly = true;
@@ -400,6 +410,11 @@ struct LoudNumbers : Module
 			row = 0;
 			resetarmed = true;
 
+			// A reset overrides any datapoint queued by clicking the chart:
+			// the playhead is going back to the start, so the click is
+			// dropped (the more recent action wins at trigger time).
+			queuedrow = -1;
+
 			// Manual resets and END -> RESET loop resets arrive as
 			// identical triggers, but the display treats them
 			// differently. A loop reset lands while our own END pulse is
@@ -418,7 +433,17 @@ struct LoudNumbers : Module
 		// If a gate is high in the trigger input, play the next datapoint
 		if (ingate.process(inputs[TRIG_INPUT].getVoltage()))
 		{
-			if (resetarmed)
+			// Take and clear any datapoint queued by a chart click. A
+			// queued point wins the trigger: the playhead jumps there and
+			// plays it, then normal sequential play resumes from there. It
+			// also cancels an armed reset (the click was the later action).
+			int q = queuedrow.exchange(-1);
+			if (q >= 0 && q < len)
+			{
+				row = q;
+				resetarmed = false;
+			}
+			else if (resetarmed)
 			{
 				// A reset already moved the playhead to the first
 				// datapoint; play that rather than stepping past it.
@@ -666,6 +691,7 @@ struct LoudNumbers : Module
 			resetarmed = false; // fresh data starts unarmed
 			playingrow = -1; // nothing is sounding until the first trigger
 			cued = true; // show the hollow circle: cued at the start
+			queuedrow = -1; // drop any pending click from the old data
 			setDataset(ds);
 			badcsv = false;
 			embeddedonly = false; // this data came from a real file
@@ -683,6 +709,93 @@ struct DataViz : Widget
 	LoudNumbers *module; // NEW
 
 	const float margin = mm2px(2.0);
+
+	// The datapoint the mouse is currently over (issue #14), or -1 when the
+	// cursor is off the chart. Set by onHover/onLeave and read by drawLayer;
+	// both run on the UI thread, so a plain int is safe here (unlike the
+	// module-side state, which crosses to the audio thread as an atomic).
+	int hoverrow = -1;
+
+	// Map a mouse position (relative to this widget) to a datapoint index by
+	// x only, ignoring y as long as the cursor is within the widget. Missing
+	// (NaN) datapoints can't be selected — they have no position on the
+	// chart — so this snaps to the nearest datapoint that has a value.
+	// Returns -1 when there's no selectable data. Shared by hover and click
+	// so they pick the same point.
+	int datapointAt(Vec pos)
+	{
+		if (!module || module->badcsv || module->colnum < 0)
+		{
+			return -1;
+		}
+		std::shared_ptr<const Dataset> ds = module->getDataset();
+		int len = ds->length();
+		if (len < 1)
+		{
+			return -1;
+		}
+		float width = box.size.x - 2 * margin;
+		float xdivisor = std::max(len - 1, 1);
+		float stepx = width / xdivisor;
+		int d = (int)std::round((pos.x - margin) / stepx);
+		// Clamp to the data: hovering the margins snaps to the first/last
+		// point rather than selecting nothing.
+		if (d < 0) d = 0;
+		if (d > len - 1) d = len - 1;
+
+		// If that point is missing, walk outwards to the nearest valid one
+		// (ties go to the left). A selectable column always has at least one
+		// value, so this normally finds something; -1 is just a safety net.
+		if (std::isnan(ds->data[d]))
+		{
+			for (int off = 1; off < len; off++)
+			{
+				if (d - off >= 0 && !std::isnan(ds->data[d - off]))
+				{
+					return d - off;
+				}
+				if (d + off < len && !std::isnan(ds->data[d + off]))
+				{
+					return d + off;
+				}
+			}
+			return -1;
+		}
+		return d;
+	}
+
+	// Track the datapoint under the cursor for the hover highlight. Consume
+	// the event so this widget stays the hover target and gets onLeave.
+	void onHover(const HoverEvent &e) override
+	{
+		Widget::onHover(e);
+		hoverrow = datapointAt(e.pos);
+		e.consume(this);
+	}
+
+	// Cursor left the chart: stop drawing the hover highlight.
+	void onLeave(const LeaveEvent &e) override
+	{
+		hoverrow = -1;
+	}
+
+	// A left-click queues the datapoint under the cursor to play on the next
+	// trigger (issue #14). Only the left button is consumed, so right-click
+	// still opens the module's context menu.
+	void onButton(const ButtonEvent &e) override
+	{
+		if (e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT)
+		{
+			int d = datapointAt(e.pos);
+			if (d >= 0)
+			{
+				module->queuedrow = d;
+				e.consume(this);
+				return;
+			}
+		}
+		Widget::onButton(e);
+	}
 
 	void drawLayer(const DrawArgs &args, int layer) override
 	{
@@ -794,8 +907,24 @@ struct DataViz : Widget
 				// 'row', which a reset moves before anything plays).
 				// Missing (NaN) datapoints have no vertical position, so
 				// no circle is drawn on them.
-				bool hollow = module->cued;
-				int r = hollow ? 0 : (int)module->playingrow;
+				//
+				// A datapoint queued by clicking the chart (issue #14) is
+				// shown with the same hollow "cued" circle, sitting on the
+				// clicked point instead of datapoint 0 — it takes priority
+				// so you can see what the next trigger will play.
+				int queued = (int)module->queuedrow;
+				bool hollow;
+				int r;
+				if (queued >= 0)
+				{
+					hollow = true;
+					r = queued;
+				}
+				else
+				{
+					hollow = module->cued;
+					r = hollow ? 0 : (int)module->playingrow;
+				}
 				if (r >= 0 && r < len && !std::isnan(ds->data[r]))
 				{
 					// Calculate x and y coords
@@ -820,6 +949,25 @@ struct DataViz : Widget
 						nvgFillColor(args.vg, color::fromHexString(module->main));
 						nvgFill(args.vg);
 					}
+					nvgClosePath(args.vg);
+				}
+
+				// Draw the hover highlight (issue #14): a faint hollow
+				// circle marks the datapoint the mouse is over (nearest by
+				// x, ignoring y). Left-clicking queues that datapoint.
+				// datapointAt() only ever returns a datapoint that has a
+				// value, so missing points are skipped rather than
+				// highlighted.
+				if (hoverrow >= 0 && hoverrow < len && !std::isnan(ds->data[hoverrow]))
+				{
+					float x = margin + (hoverrow * width / xdivisor);
+					float y = (height - 3) - (scalemap(ds->data[hoverrow], ds->datamin, ds->datamax,
+															 0.f, height - 6));
+					nvgBeginPath(args.vg);
+					nvgCircle(args.vg, x, y, mm2px(circ_size));
+					nvgStrokeColor(args.vg, color::fromHexString(module->faded));
+					nvgStrokeWidth(args.vg, mm2px(0.3));
+					nvgStroke(args.vg);
 					nvgClosePath(args.vg);
 				}
 
