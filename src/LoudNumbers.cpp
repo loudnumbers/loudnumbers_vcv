@@ -713,6 +713,13 @@ struct LoudNumbers : Module
 	{
 		INFO("Processing CSV: %s", path.c_str());
 
+		// Remember the path straight away, even if parsing fails below. That
+		// way changing the delimiter (or "Reload CSV from disk") can re-read
+		// the same file after a failed parse — e.g. loading a colon-separated
+		// file, which auto-detect misses, then fixing it with Custom ':'
+		// instead of having to load the file all over again.
+		currentpath = path;
+
 		try {
 			// Distinguish a missing file from an unparseable one, so the
 			// display can tell the user which problem they have
@@ -852,8 +859,8 @@ struct LoudNumbers : Module
 			}
 
 			// Publish: from here on the audio thread and UI see the new data.
+			// (currentpath was already set at the top of this function.)
 			colnum = col;
-			currentpath = path;
 			row = -1; // because the first thing we do is increment it
 			resetarmed = false; // fresh data starts unarmed
 			playingrow = -1; // nothing is sounding until the first trigger
