@@ -1,6 +1,11 @@
 name: Build VCV Rack Plugin
 on: [push, pull_request]
 
+# The workflow's GITHUB_TOKEN is read-only unless a job asks for more.
+# Only the publish job needs write access, to create the release.
+permissions:
+  contents: read
+
 env:
   rack-sdk-version: latest
   rack-plugin-toolchain-dir: /home/build/rack-plugin-toolchain
@@ -36,7 +41,11 @@ jobs:
     needs: modify-plugin-version
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/qno/rack-plugin-toolchain-win-linux
+      # Pinned by digest, because this image compiles the plugin binaries that
+      # get released, so a changed image would change what users install.
+      # To update: look up the current digest of the image's "latest" tag on
+      # ghcr.io and replace the sha256 value below.
+      image: ghcr.io/qno/rack-plugin-toolchain-win-linux@sha256:fcb1ef432cb646f0c80a1828fbcfa4deb58469e1e188c953740ebdc7c8f93d7d
       options: --user root
     strategy:
       matrix:
@@ -100,14 +109,17 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     needs: [build, build-mac]
+    permissions:
+      contents: write  # create the release and upload its files
     steps:
       - uses: actions/checkout@v4
-      - uses: FranzDiebold/github-env-vars-action@v2
       - name: Check if plugin version matches tag
+        env:
+          TAG_NAME: ${{ github.ref_name }}
         run: |
           pluginversion=`jq -r '.version' plugin.json`
-          if [ "v$pluginversion" != "${{ env.CI_REF_NAME }}" ]; then
-            echo "Plugin version from plugin.json 'v$pluginversion' doesn't match with tag version '${{ env.CI_REF_NAME }}'"
+          if [ "v$pluginversion" != "$TAG_NAME" ]; then
+            echo "Plugin version from plugin.json 'v$pluginversion' doesn't match with tag version '$TAG_NAME'"
             exit 1
           fi
       # No name/body here: if a release for this tag already exists (e.g. a
@@ -115,7 +127,7 @@ jobs:
       # alone instead of overwriting them. A release created from scratch
       # gets the tag name as its title and empty notes.
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ github.ref }}
           draft: false
@@ -124,7 +136,7 @@ jobs:
         with:
           path: _artifacts
       - name: Upload release assets
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # 2.11.5
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: _artifacts/**/*.vcvplugin
