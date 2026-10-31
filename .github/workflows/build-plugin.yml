@@ -41,7 +41,11 @@ jobs:
     needs: modify-plugin-version
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/qno/rack-plugin-toolchain-win-linux
+      # Pinned by digest, because this image compiles the plugin binaries that
+      # get released, so a changed image would change what users install.
+      # To update: look up the current digest of the image's "latest" tag on
+      # ghcr.io and replace the sha256 value below.
+      image: ghcr.io/qno/rack-plugin-toolchain-win-linux@sha256:fcb1ef432cb646f0c80a1828fbcfa4deb58469e1e188c953740ebdc7c8f93d7d
       options: --user root
     strategy:
       matrix:
